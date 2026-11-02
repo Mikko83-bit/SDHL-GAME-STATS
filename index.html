@@ -165,20 +165,24 @@
 
         function populateGameFilter() {
             const select = document.getElementById('gameFilter');
-            const games = {};
+            const gamesSet = new Set();
+            
             rawData.forEach(row => {
-                const gameId = row['Game ID'] || row['GameID'] || 'Tuntematon';
                 const date = row['Date'] || '';
                 const opponent = row['Opponent'] || '';
-                if (gameId !== 'Tuntematon') {
-                    games[gameId] = `Peli #${gameId} (${date} vs ${opponent})`;
+                if (date && opponent && date !== '-') {
+                    gamesSet.add(`${date}___${opponent}`);
                 }
             });
 
+            // Muutetaan arrayksi ja järjestetään päivämäärän mukaan
+            const gamesArray = Array.from(gamesSet).sort();
+
             select.innerHTML = '<option value="all">Kaikki pelit yhteensä (Kauden tilastot)</option>';
-            for (const [id, label] of Object.entries(games)) {
-                select.innerHTML += `<option value="${id}">${label}</option>`;
-            }
+            gamesArray.forEach(gameStr => {
+                const [date, opponent] = gameStr.split('___');
+                select.innerHTML += `<option value="${gameStr}">${date} vs ${opponent}</option>`;
+            });
 
             select.addEventListener('change', filterData);
             document.getElementById('playerSearch').addEventListener('input', renderTable);
@@ -195,17 +199,21 @@
 
                     if (!aggregated[player]) {
                         aggregated[player] = { ...row };
-                        // Nollataan/alustetaan numerokentät oikein
+                        // Poistetaan pelikohtaiset tiedot kausiyhteenvedosta
+                        delete aggregated[player]['Home/away'];
+                        delete aggregated[player]['Date'];
+                        delete aggregated[player]['Opponent'];
+                        delete aggregated[player]['Game ID'];
+
                         Object.keys(row).forEach(key => {
-                            if (key !== 'Home/away' && key !== 'Date' && key !== 'Opponent' && key !== 'Team' && key !== 'Player' && key !== 'Position') {
+                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position'].includes(key)) {
                                 let val = Number(row[key]);
                                 aggregated[player][key] = isNaN(val) ? 0 : val;
                             }
                         });
-                        aggregated['GamesPlayed'] = 1;
                     } else {
                         Object.keys(row).forEach(key => {
-                            if (key !== 'Home/away' && key !== 'Date' && key !== 'Opponent' && key !== 'Team' && key !== 'Player' && key !== 'Position') {
+                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position'].includes(key)) {
                                 let val = Number(row[key]);
                                 if (!isNaN(val)) {
                                     aggregated[player][key] = (Number(aggregated[player][key]) || 0) + val;
@@ -217,8 +225,9 @@
                 currentFilteredData = Object.values(aggregated);
                 document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä";
             } else {
-                currentFilteredData = rawData.filter(row => String(row['Game ID']) === String(selectedGame));
-                document.getElementById('tableTitle').innerText = `Pelaajatilastot - Peli #${selectedGame}`;
+                const [date, opponent] = selectedGame.split('___');
+                currentFilteredData = rawData.filter(row => String(row['Date']) === date && String(row['Opponent']) === opponent);
+                document.getElementById('tableTitle').innerText = `Pelaajatilastot - Peli (${date} vs ${opponent})`;
             }
 
             currentSortColumn = null;
@@ -231,7 +240,7 @@
                 isAscending = !isAscending;
             } else {
                 currentSortColumn = column;
-                isAscending = false; // Oletuksena laskeva (suurin ensin)
+                isAscending = false;
             }
 
             currentFilteredData.sort((a, b) => {
