@@ -14,6 +14,14 @@
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        /* Lukitut sarakkeet taulukossa */
+        .sticky-col-team { position: sticky; left: 0px; z-index: 20; background-color: #0f172a; }
+        .sticky-col-shirt { position: sticky; left: 65px; z-index: 20; background-color: #0f172a; }
+        .sticky-col-player { position: sticky; left: 130px; z-index: 20; background-color: #0f172a; box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.5); }
+        
+        /* Otsikoiden taustavärit lukituille sarakkeille */
+        thead .sticky-col-team, thead .sticky-col-shirt, thead .sticky-col-player { background-color: #020617; }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
@@ -23,7 +31,7 @@
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
             <div>
                 <h1 class="text-xl font-black tracking-wider text-white uppercase">SDHL Game Stats</h1>
-                <p class="text-xs text-red-300">Klikkaa otsikkoa lajitellaksesi • Klikkaa pelaajaa nähdäksesi pelit</p>
+                <p class="text-xs text-red-300">Pelaajan tiedot pysyvät vasemmalla • Klikkaa otsikkoa lajitellaksesi</p>
             </div>
             
             <div class="flex flex-wrap items-center gap-3">
@@ -58,7 +66,7 @@
 
             <div class="overflow-x-auto custom-scrollbar max-h-[600px]">
                 <table id="statsTable" class="w-full text-left border-collapse text-xs whitespace-nowrap">
-                    <thead id="tableHeader" class="bg-slate-950 text-slate-400 uppercase text-[10px] sticky top-0 z-10 border-b border-slate-800"></thead>
+                    <thead id="tableHeader" class="bg-slate-950 text-slate-400 uppercase text-[10px] sticky top-0 z-30 border-b border-slate-800"></thead>
                     <tbody id="tableBody" class="divide-y divide-slate-800/60"></tbody>
                 </table>
             </div>
@@ -256,7 +264,6 @@
                     }
                 });
 
-                // Muunnetaan takaisin keskiarvot prosenteille ja sekunnit peliajaksi
                 Object.keys(aggregated).forEach(player => {
                     const c = counts[player] || 1;
                     Object.keys(aggregated[player]).forEach(key => {
@@ -322,21 +329,31 @@
             const headers = Object.keys(currentFilteredData[0]);
             
             const headerTr = document.getElementById('tableHeader');
-            headerTr.innerHTML = headers.map(h => `<th class="px-3 py-2 cursor-pointer hover:text-white underline" onclick="sortTable('${h}')">${h} ${currentSortColumn === h ? (isAscending ? '▲' : '▼') : ''}</th>`).join('');
+            headerTr.innerHTML = headers.map((h, index) => {
+                let stickyClass = '';
+                if (h === 'Team') stickyClass = 'sticky-col-team';
+                else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
+                else if (h === 'Player') stickyClass = 'sticky-col-player';
+                return `<th class="px-3 py-2 cursor-pointer hover:text-white underline ${stickyClass}" onclick="sortTable('${h}')">${h} ${currentSortColumn === h ? (isAscending ? '▲' : '▼') : ''}</th>`;
+            }).join('');
 
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = filtered.map(row => {
                 const playerName = row['Player'];
                 return `<tr class="hover:bg-slate-800/50 transition">` + 
-                    headers.map(h => {
+                    headers.map((h, index) => {
                         let val = row[h] !== undefined ? row[h] : '-';
                         if (typeof val === 'number' && !Number.isInteger(val)) {
                             val = val.toFixed(2);
                         }
-                        if (h === 'Player') {
-                            return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline" onclick="openPlayerModal('${playerName}')">${val}</td>`;
+                        let stickyClass = '';
+                        if (h === 'Team') stickyClass = 'sticky-col-team';
+                        else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
+                        else if (h === 'Player') {
+                            stickyClass = 'sticky-col-player';
+                            return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline ${stickyClass}" onclick="openPlayerModal('${playerName}')">${val}</td>`;
                         }
-                        return `<td class="px-3 py-2 text-slate-300">${val}</td>`;
+                        return `<td class="px-3 py-2 text-slate-300 ${stickyClass}">${val}</td>`;
                     }).join('') +
                     `</tr>`;
             }).join('');
