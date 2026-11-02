@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,6 +10,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Chart.js for graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js Data Labels Plugin for displaying values on top of bars -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
@@ -24,47 +26,47 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
 
-    <!-- Yläpalkki -->
+    <!-- Top Bar -->
     <header class="bg-red-950 border-b border-red-900 shadow-lg">
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
             <div>
                 <h1 class="text-xl font-black tracking-wider text-white uppercase">SDHL Game Stats</h1>
-                <p class="text-xs text-red-300">Pelaajan tiedot pysyvät vasemmalla • Klikkaa otsikkoa lajitellaksesi</p>
+                <p class="text-xs text-red-300">Player info stays on the left • Click column header to sort</p>
             </div>
             
             <div class="flex flex-wrap items-center gap-3">
                 <div>
-                    <label class="block text-[10px] text-red-200 uppercase font-bold">Valitse näkymä / peli</label>
+                    <label class="block text-[10px] text-red-200 uppercase font-bold">Select View / Game</label>
                     <select id="gameFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
-                        <option value="all">Kaikki pelit yhteensä (Kauden tilastot)</option>
+                        <option value="all">All Games Total (Season Stats)</option>
                     </select>
                 </div>
 
                 <div>
-                    <label class="block text-[10px] text-red-200 uppercase font-bold">Suodata joukkue</label>
+                    <label class="block text-[10px] text-red-200 uppercase font-bold">Filter Team</label>
                     <select id="teamFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
-                        <option value="all">Kaikki joukkueet</option>
+                        <option value="all">All Teams</option>
                     </select>
                 </div>
 
                 <div>
-                    <label class="block text-[10px] text-red-200 uppercase font-bold">Tuo uusi Excel</label>
+                    <label class="block text-[10px] text-red-200 uppercase font-bold">Upload New Excel</label>
                     <input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" class="text-xs text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-red-900 file:text-white hover:file:bg-red-800 cursor-pointer">
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- Pääsisältö -->
+    <!-- Main Content -->
     <main class="max-w-[98%] mx-auto px-2 py-6">
 
-        <!-- Tilastotaulukko -->
+        <!-- Stats Table -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden mb-8">
             <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
-                <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Pelaajatilastot (Kaikki pelit yhteensä)</h2>
+                <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Player Statistics (All Games Total)</h2>
                 <div class="flex gap-2">
-                    <input type="text" id="playerSearch" placeholder="Hae pelaajaa..." class="bg-slate-950 border border-slate-700 text-xs text-white rounded px-3 py-1 focus:outline-none focus:border-red-500">
-                    <button onclick="copyTable()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">Kopioi</button>
+                    <input type="text" id="playerSearch" placeholder="Search player..." class="bg-slate-950 border border-slate-700 text-xs text-white rounded px-3 py-1 focus:outline-none focus:border-red-500">
+                    <button onclick="copyTable()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">Copy</button>
                     <button onclick="exportCSV()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">CSV</button>
                 </div>
             </div>
@@ -77,22 +79,22 @@
             </div>
         </div>
 
-        <!-- Kaaviot / Vertailut -->
+        <!-- Charts / Comparisons -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalit vs Odotetut maalit (xG)</h3>
+                <h3 id="chart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals vs Expected Goals (xG)</h3>
                 <div class="relative h-72">
                     <canvas id="chart1"></canvas>
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Laukaukset & CORSI-lukemat</h3>
+                <h3 id="chart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Shots & CORSI metrics</h3>
                 <div class="relative h-72">
                     <canvas id="chart2"></canvas>
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chart3Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Aloitukset (Faceoffs)</h3>
+                <h3 id="chart3Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Top Game Score / 60</h3>
                 <div class="relative h-72">
                     <canvas id="chart3"></canvas>
                 </div>
@@ -101,13 +103,13 @@
 
     </main>
 
-    <!-- Pelaajan pelikohtainen modaali -->
+    <!-- Player Game History Modal -->
     <div id="playerModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             <div class="bg-slate-950 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
                 <div>
-                    <h3 id="modalPlayerName" class="text-lg font-bold text-white">Pelaajan tiedot</h3>
-                    <p class="text-xs text-red-400">Ottelukohtaiset tilastot kauden aikana</p>
+                    <h3 id="modalPlayerName" class="text-lg font-bold text-white">Player Details</h3>
+                    <p class="text-xs text-red-400">Game-by-game statistics during the season</p>
                 </div>
                 <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 py-1">&times;</button>
             </div>
@@ -118,7 +120,7 @@
                 </table>
             </div>
             <div class="bg-slate-950 px-6 py-3 border-t border-slate-800 text-right">
-                <button onclick="closeModal()" class="bg-red-900 hover:bg-red-800 text-white text-xs px-4 py-2 rounded transition">Sulje</button>
+                <button onclick="closeModal()" class="bg-red-900 hover:bg-red-800 text-white text-xs px-4 py-2 rounded transition">Close</button>
             </div>
         </div>
     </div>
@@ -167,7 +169,9 @@
             const pt = Number(row['Penalty time']) || 0;
             const fow = Number(row['Faceoffs won']) || 0;
             const fol = Number(row['Faceoffs lost']) || 0;
-            const netXg = Number(row['Net xG (xG player on - opp. team\'s xG)'] || row['Net xG'] || row['xG (Expected goals)'] || 0);
+            
+            let netXgKey = Object.keys(row).find(k => k.toLowerCase().includes('net xg'));
+            const netXg = Number(row[netXgKey] || row['xG (Expected goals)'] || 0);
 
             let score = 0.0;
             if (pos === 'F') {
@@ -180,6 +184,23 @@
             return score;
         }
 
+        function reorderRowKeys(row) {
+            const ordered = {};
+            const keys = Object.keys(row);
+
+            ['Team', 'Shirt number', 'Player', 'Position', 'Time on ice', 'All shifts', 'Game Score', 'Game Score / 60'].forEach(k => {
+                if (row[k] !== undefined) ordered[k] = row[k];
+            });
+
+            keys.forEach(k => {
+                if (!ordered[k]) {
+                    ordered[k] = row[k];
+                }
+            });
+
+            return ordered;
+        }
+
         window.addEventListener('DOMContentLoaded', async () => {
             try {
                 const response = await fetch('Sdhl Game score 2026-2027.xlsx');
@@ -188,7 +209,7 @@
                     processExcelData(arrayBuffer);
                 }
             } catch (e) {
-                console.log('Lataa Excel manuaalisesti.');
+                console.log('Load Excel manually.');
             }
         });
 
@@ -206,19 +227,20 @@
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
             
-            rawData = XLSX.utils.sheet_to_json(worksheet, { defval: "-" });
+            let tempRaw = XLSX.utils.sheet_to_json(worksheet, { defval: "-" });
             
-            rawData.forEach(row => {
+            rawData = tempRaw.map(row => {
                 if (row['Date']) {
                     row['Date'] = formatExcelDate(row['Date']);
                 }
                 const gs = calculateGameScore(row);
                 row['Game Score'] = Number(gs.toFixed(2));
                 
-                // Lasketaan Game Score / 60
                 const toiSecs = timeToSecs(row['Time on ice']);
                 const gsPer60 = toiSecs > 0 ? (gs / (toiSecs / 3600)) : 0;
                 row['Game Score / 60'] = Number(gsPer60.toFixed(2));
+
+                return reorderRowKeys(row);
             });
             
             populateGameFilter();
@@ -242,7 +264,7 @@
 
             const gamesArray = Array.from(gamesSet).sort();
 
-            select.innerHTML = '<option value="all">Kaikki pelit yhteensä (Kauden tilastot)</option>';
+            select.innerHTML = '<option value="all">All Games Total (Season Stats)</option>';
             gamesArray.forEach(gameStr => {
                 const [date, matchTeams] = gameStr.split('___');
                 select.innerHTML += `<option value="${gameStr}">${date}: ${matchTeams}</option>`;
@@ -264,7 +286,7 @@
             });
 
             const teamsArray = Array.from(teamsSet).sort();
-            teamSelect.innerHTML = '<option value="all">Kaikki joukkueet</option>';
+            teamSelect.innerHTML = '<option value="all">All Teams</option>';
             teamsArray.forEach(t => {
                 teamSelect.innerHTML += `<option value="${t}">${t}</option>`;
             });
@@ -305,8 +327,8 @@
                                     let cleanVal = parseFloat(String(row[key]).replace('%', ''));
                                     aggregated[player][key] = isNaN(cleanVal) ? 0 : cleanVal;
                                 } else {
-                                    let val = Number(row[key]);
-                                    aggregated[player][key] = isNaN(val) ? 0 : val;
+                                    let val = parseFloat(row[key]);
+                                    aggregated[player][key] = isNaN(val) ? row[key] : val;
                                 }
                             }
                         });
@@ -325,9 +347,9 @@
                                         aggregated[player][key] += cleanVal;
                                     }
                                 } else {
-                                    let val = Number(row[key]);
+                                    let val = parseFloat(row[key]);
                                     if (!isNaN(val)) {
-                                        aggregated[player][key] += val;
+                                        aggregated[player][key] = (Number(aggregated[player][key]) || 0) + val;
                                     }
                                 }
                             }
@@ -350,12 +372,12 @@
                         }
                     });
 
-                    // Lasketaan kauden Game Score / 60
                     aggregated[player]['Game Score / 60'] = totalSecs > 0 ? Number((gsSum / (totalSecs / 3600)).toFixed(2)) : 0.0;
+                    aggregated[player] = reorderRowKeys(aggregated[player]);
                 });
 
                 baseData = Object.values(aggregated);
-                document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä";
+                document.getElementById('tableTitle').innerText = "Player Statistics - All Games Total";
             } else {
                 const [date, matchTeams] = selectedGame.split('___');
                 const [teamA, teamB] = matchTeams.split(' vs ');
@@ -367,10 +389,9 @@
                     return (t === teamA && o === teamB) || (t === teamB && o === teamA);
                 });
 
-                document.getElementById('tableTitle').innerText = `Pelaajatilastot - Peli (${date}: ${teamA} vs ${teamB})`;
+                document.getElementById('tableTitle').innerText = `Player Statistics - Game (${date}: ${teamA} vs ${teamB})`;
             }
 
-            // Sovelletaan joukkuesuodatetta
             if (selectedTeam !== 'all') {
                 currentFilteredData = baseData.filter(row => String(row['Team']) === selectedTeam);
             } else {
@@ -394,14 +415,19 @@
                 let valA = a[column];
                 let valB = b[column];
 
-                if (valA === undefined) valA = '';
+                if (valA === undefined || valA === '-') valA = -999999;
+                if (valB === undefined || valB === '-') valB = -999999;
+
                 if (typeof valA === 'string' && valA.endsWith('%')) valA = parseFloat(valA);
                 if (typeof valB === 'string' && valB.endsWith('%')) valB = parseFloat(valB);
                 if (typeof valA === 'string' && valA.includes(':')) valA = timeToSecs(valA);
                 if (typeof valB === 'string' && valB.includes(':')) valB = timeToSecs(valB);
 
-                if (!isNaN(valA) && !isNaN(valB) && valA !== '' && valB !== '') {
-                    return isAscending ? Number(valA) - Number(valB) : Number(valB) - Number(valA);
+                let numA = parseFloat(valA);
+                let numB = parseFloat(valB);
+
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return isAscending ? numA - numB : numB - numA;
                 } else {
                     return isAscending ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
                 }
@@ -455,7 +481,7 @@
         }
 
         function openPlayerModal(playerName) {
-            document.getElementById('modalPlayerName').innerText = `Pelaaja: ${playerName}`;
+            document.getElementById('modalPlayerName').innerText = `Player: ${playerName}`;
             const playerGames = rawData.filter(row => row['Player'] === playerName);
 
             if (playerGames.length === 0) return;
@@ -484,9 +510,27 @@
             if (chart2Instance) chart2Instance.destroy();
             if (chart3Instance) chart3Instance.destroy();
 
+            // Yhteinen plugin-asetus lukujen näyttämiseen pylväiden päällä
+            const datalabelsPlugin = {
+                plugins: [ChartDataLabels],
+                options: {
+                    plugins: {
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#cbd5e1',
+                            font: { size: 10, weight: 'bold' },
+                            formatter: function(value) {
+                                return value !== 0 ? value : '';
+                            }
+                        }
+                    }
+                }
+            };
+
             if (selectedGame === 'all') {
-                document.getElementById('chart1Title').innerText = "Maalit vs Odotetut maalit (xG)";
-                document.getElementById('chart2Title').innerText = "Laukaukset & CORSI-lukemat";
+                document.getElementById('chart1Title').innerText = "Goals vs Expected Goals (xG)";
+                document.getElementById('chart2Title').innerText = "Shots & CORSI metrics";
                 document.getElementById('chart3Title').innerText = "Top Game Score / 60";
 
                 const sortedByGoals = [...currentFilteredData].sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0)).slice(0, 10);
@@ -497,38 +541,62 @@
                 
                 chart1Instance = new Chart(document.getElementById('chart1').getContext('2d'), {
                     type: 'bar',
+                    plugins: [ChartDataLabels],
                     data: {
                         labels: labels,
                         datasets: [
-                            { label: 'Maalit', data: sortedByGoals.map(d => Number(d['Goals']) || 0), backgroundColor: '#ef4444' },
+                            { label: 'Goals', data: sortedByGoals.map(d => Number(d['Goals']) || 0), backgroundColor: '#ef4444' },
                             { label: 'xG', data: sortedByGoals.map(d => Number(d['xG (Expected goals)'] || d['xG']) || 0), backgroundColor: '#3b82f6' }
                         ]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                            datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                        },
+                        scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } }
+                    }
                 });
 
                 chart2Instance = new Chart(document.getElementById('chart2').getContext('2d'), {
                     type: 'bar',
+                    plugins: [ChartDataLabels],
                     data: {
                         labels: labels,
                         datasets: [{ label: 'CORSI', data: sortedByGoals.map(d => Number(d['CORSI']) || 0), backgroundColor: '#10b981' }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                            datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                        },
+                        scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } }
+                    }
                 });
 
                 chart3Instance = new Chart(document.getElementById('chart3').getContext('2d'), {
                     type: 'bar',
+                    plugins: [ChartDataLabels],
                     data: {
                         labels: gsLabels,
                         datasets: [{ label: 'Game Score / 60', data: sortedByGS60.map(d => Number(d['Game Score / 60']) || 0), backgroundColor: '#f59e0b' }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                            datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                        },
+                        scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } }
+                    }
                 });
 
             } else {
-                document.getElementById('chart1Title').innerText = "Joukkueiden xG Vertailu";
-                document.getElementById('chart2Title').innerText = "Joukkueiden Corsi For (%)";
-                document.getElementById('chart3Title').innerText = "Joukkueiden Aloitusvoitto-%";
+                document.getElementById('chart1Title').innerText = "Team xG Comparison";
+                document.getElementById('chart2Title').innerText = "Team Corsi For (%)";
+                document.getElementById('chart3Title').innerText = "Team Faceoffs Won (%)";
 
                 const teamStats = {};
 
@@ -546,7 +614,7 @@
                 });
 
                 const teams = Object.keys(teamStats);
-                const xgData = teams.map(t => teamStats[t].xg);
+                const xgData = teams.map(t => Number(teamStats[t].xg.toFixed(2)));
                 
                 const corsiPctData = teams.map(t => {
                     const plus = teamStats[t].corsiPlus;
@@ -564,29 +632,53 @@
 
                 chart1Instance = new Chart(document.getElementById('chart1').getContext('2d'), {
                     type: 'bar',
+                    plugins: [ChartDataLabels],
                     data: {
                         labels: teams,
                         datasets: [{ label: 'xG (Expected Goals)', data: xgData, backgroundColor: '#3b82f6' }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                            datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 10, weight: 'bold' } }
+                        },
+                        scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } }
+                    }
                 });
 
                 chart2Instance = new Chart(document.getElementById('chart2').getContext('2d'), {
                     type: 'bar',
+                    plugins: [ChartDataLabels],
                     data: {
                         labels: teams,
                         datasets: [{ label: 'Corsi For (%)', data: corsiPctData, backgroundColor: '#10b981' }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: function(value) { return value + '%'; } } } } } }
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                            datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 10, weight: 'bold' }, formatter: (v) => v + '%' }
+                        },
+                        scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' } } }
+                    }
                 });
 
                 chart3Instance = new Chart(document.getElementById('chart3').getContext('2d'), {
                     type: 'bar',
+                    plugins: [ChartDataLabels],
                     data: {
                         labels: teams,
                         datasets: [{ label: 'Faceoffs Won (%)', data: faceoffPctData, backgroundColor: '#f59e0b' }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: function(value) { return value + '%'; } } } } } }
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                            datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 10, weight: 'bold' }, formatter: (v) => v + '%' }
+                        },
+                        scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' } } }
+                    }
                 });
             }
         }
@@ -600,7 +692,7 @@
                 text += rowText.join("\t") + "\n";
             }
             navigator.clipboard.writeText(text);
-            alert("Taulukko kopioitu leikepöydälle!");
+            alert("Table copied to clipboard!");
         }
 
         function exportCSV() {
@@ -613,7 +705,7 @@
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "sdhl_tilastot.csv");
+            link.setAttribute("download", "sdhl_stats.csv");
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
