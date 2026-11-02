@@ -125,6 +125,20 @@
             return `${year}-${month}-${day}`;
         }
 
+        function timeToSecs(tStr) {
+            if (!tStr || typeof tStr !== 'string' || !tStr.includes(':')) return 0;
+            const parts = tStr.split(':');
+            const m = parseInt(parts[0], 10) || 0;
+            const s = parseInt(parts[1], 10) || 0;
+            return m * 60 + s;
+        }
+
+        function secsToTime(secs) {
+            const m = Math.floor(secs / 60);
+            const s = secs % 60;
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
         window.addEventListener('DOMContentLoaded', async () => {
             try {
                 const response = await fetch('Sdhl Game score 2026-2027.xlsx');
@@ -175,7 +189,6 @@
                 }
             });
 
-            // Muutetaan arrayksi ja järjestetään päivämäärän mukaan
             const gamesArray = Array.from(gamesSet).sort();
 
             select.innerHTML = '<option value="all">Kaikki pelit yhteensä (Kauden tilastot)</option>';
@@ -193,35 +206,68 @@
             
             if (selectedGame === 'all') {
                 const aggregated = {};
+                const counts = {};
+
                 rawData.forEach(row => {
                     const player = row['Player'];
                     if (!player || player === '-') return;
 
                     if (!aggregated[player]) {
                         aggregated[player] = { ...row };
-                        // Poistetaan pelikohtaiset tiedot kausiyhteenvedosta
                         delete aggregated[player]['Home/away'];
                         delete aggregated[player]['Date'];
                         delete aggregated[player]['Opponent'];
                         delete aggregated[player]['Game ID'];
 
+                        counts[player] = 1;
+
                         Object.keys(row).forEach(key => {
                             if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position'].includes(key)) {
-                                let val = Number(row[key]);
-                                aggregated[player][key] = isNaN(val) ? 0 : val;
+                                if (key === 'Time on ice') {
+                                    aggregated[player][key] = timeToSecs(row[key]);
+                                } else if (key.includes('%')) {
+                                    let cleanVal = parseFloat(String(row[key]).replace('%', ''));
+                                    aggregated[player][key] = isNaN(cleanVal) ? 0 : cleanVal;
+                                } else {
+                                    let val = Number(row[key]);
+                                    aggregated[player][key] = isNaN(val) ? 0 : val;
+                                }
                             }
                         });
                     } else {
+                        counts[player]++;
                         Object.keys(row).forEach(key => {
                             if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position'].includes(key)) {
-                                let val = Number(row[key]);
-                                if (!isNaN(val)) {
-                                    aggregated[player][key] = (Number(aggregated[player][key]) || 0) + val;
+                                if (key === 'Time on ice') {
+                                    aggregated[player][key] += timeToSecs(row[key]);
+                                } else if (key.includes('%')) {
+                                    let cleanVal = parseFloat(String(row[key]).replace('%', ''));
+                                    if (!isNaN(cleanVal)) {
+                                        aggregated[player][key] += cleanVal;
+                                    }
+                                } else {
+                                    let val = Number(row[key]);
+                                    if (!isNaN(val)) {
+                                        aggregated[player][key] += val;
+                                    }
                                 }
                             }
                         });
                     }
                 });
+
+                // Muunnetaan takaisin keskiarvot prosenteille ja sekunnit peliajaksi
+                Object.keys(aggregated).forEach(player => {
+                    const c = counts[player] || 1;
+                    Object.keys(aggregated[player]).forEach(key => {
+                        if (key === 'Time on ice') {
+                            aggregated[player][key] = secsToTime(aggregated[player][key]);
+                        } else if (key.includes('%')) {
+                            aggregated[player][key] = (aggregated[player][key] / c).toFixed(1) + '%';
+                        }
+                    });
+                });
+
                 currentFilteredData = Object.values(aggregated);
                 document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä";
             } else {
@@ -247,11 +293,14 @@
                 let valA = a[column];
                 let valB = b[column];
 
-                if (valA === undefined) valA = 0;
-                if (valB === undefined) valB = 0;
+                if (valA === undefined) valA = '';
+                if (typeof valA === 'string' && valA.endsWith('%')) valA = parseFloat(valA);
+                if (typeof valB === 'string' && valB.endsWith('%')) valB = parseFloat(valB);
+                if (typeof valA === 'string' && valA.includes(':')) valA = timeToSecs(valA);
+                if (typeof valB === 'string' && valB.includes(':')) valB = timeToSecs(valB);
 
-                if (!isNaN(valA) && !isNaN(valB)) {
-                    return isAscending ? valA - valB : valB - valA;
+                if (!isNaN(valA) && !isNaN(valB) && valA !== '' && valB !== '') {
+                    return isAscending ? Number(valA) - Number(valB) : Number(valB) - Number(valA);
                 } else {
                     return isAscending ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
                 }
