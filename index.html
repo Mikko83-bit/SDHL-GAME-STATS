@@ -41,6 +41,13 @@
                 </div>
 
                 <div>
+                    <label class="block text-[10px] text-red-200 uppercase font-bold">Suodata joukkue</label>
+                    <select id="teamFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
+                        <option value="all">Kaikki joukkueet</option>
+                    </select>
+                </div>
+
+                <div>
                     <label class="block text-[10px] text-red-200 uppercase font-bold">Tuo uusi Excel</label>
                     <input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" class="text-xs text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-red-900 file:text-white hover:file:bg-red-800 cursor-pointer">
                 </div>
@@ -150,7 +157,6 @@
             return `${m}:${s < 10 ? '0' : ''}${s}`;
         }
 
-        // Apufunktio Game Scoren laskemiseen rivikohtaisesti
         function calculateGameScore(row) {
             const pos = String(row['Position'] || '').toUpperCase().trim();
             const g = Number(row['Goals']) || 0;
@@ -206,11 +212,17 @@
                 if (row['Date']) {
                     row['Date'] = formatExcelDate(row['Date']);
                 }
-                // Lasketaan Game Score jokaiselle riville
-                row['Game Score'] = Number(calculateGameScore(row).toFixed(2));
+                const gs = calculateGameScore(row);
+                row['Game Score'] = Number(gs.toFixed(2));
+                
+                // Lasketaan Game Score / 60
+                const toiSecs = timeToSecs(row['Time on ice']);
+                const gsPer60 = toiSecs > 0 ? (gs / (toiSecs / 3600)) : 0;
+                row['Game Score / 60'] = Number(gsPer60.toFixed(2));
             });
             
             populateGameFilter();
+            populateTeamFilter();
             filterData();
         }
 
@@ -236,16 +248,39 @@
                 select.innerHTML += `<option value="${gameStr}">${date}: ${matchTeams}</option>`;
             });
 
+            select.removeEventListener('change', filterData);
             select.addEventListener('change', filterData);
             document.getElementById('playerSearch').addEventListener('input', renderTable);
+            document.getElementById('teamFilter').addEventListener('change', filterData);
+        }
+
+        function populateTeamFilter() {
+            const teamSelect = document.getElementById('teamFilter');
+            const teamsSet = new Set();
+
+            rawData.forEach(row => {
+                const team = row['Team'];
+                if (team && team !== '-') teamsSet.add(team);
+            });
+
+            const teamsArray = Array.from(teamsSet).sort();
+            teamSelect.innerHTML = '<option value="all">Kaikki joukkueet</option>';
+            teamsArray.forEach(t => {
+                teamSelect.innerHTML += `<option value="${t}">${t}</option>`;
+            });
         }
 
         function filterData() {
             const selectedGame = document.getElementById('gameFilter').value;
+            const selectedTeam = document.getElementById('teamFilter').value;
             
+            let baseData = [];
+
             if (selectedGame === 'all') {
                 const aggregated = {};
                 const counts = {};
+                const toiSeconds = {};
+                const totalGs = {};
 
                 rawData.forEach(row => {
                     const player = row['Player'];
@@ -259,11 +294,13 @@
                         delete aggregated[player]['Game ID'];
 
                         counts[player] = 1;
+                        toiSeconds[player] = timeToSecs(row['Time on ice']);
+                        totalGs[player] = row['Game Score'] || 0;
 
                         Object.keys(row).forEach(key => {
-                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position'].includes(key)) {
+                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Game Score / 60'].includes(key)) {
                                 if (key === 'Time on ice') {
-                                    aggregated[player][key] = timeToSecs(row[key]);
+                                    aggregated[player][key] = toiSeconds[player];
                                 } else if (key.includes('%')) {
                                     let cleanVal = parseFloat(String(row[key]).replace('%', ''));
                                     aggregated[player][key] = isNaN(cleanVal) ? 0 : cleanVal;
@@ -275,10 +312,13 @@
                         });
                     } else {
                         counts[player]++;
+                        toiSeconds[player] += timeToSecs(row['Time on ice']);
+                        totalGs[player] += row['Game Score'] || 0;
+
                         Object.keys(row).forEach(key => {
-                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position'].includes(key)) {
+                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Game Score / 60'].includes(key)) {
                                 if (key === 'Time on ice') {
-                                    aggregated[player][key] += timeToSecs(row[key]);
+                                    aggregated[player][key] = toiSeconds[player];
                                 } else if (key.includes('%')) {
                                     let cleanVal = parseFloat(String(row[key]).replace('%', ''));
                                     if (!isNaN(cleanVal)) {
@@ -297,24 +337,30 @@
 
                 Object.keys(aggregated).forEach(player => {
                     const c = counts[player] || 1;
+                    const totalSecs = toiSeconds[player] || 0;
+                    const gsSum = totalGs[player] || 0;
+
                     Object.keys(aggregated[player]).forEach(key => {
                         if (key === 'Time on ice') {
-                            aggregated[player][key] = secsToTime(aggregated[player][key]);
+                            aggregated[player][key] = secsToTime(totalSecs);
                         } else if (key.includes('%')) {
                             aggregated[player][key] = (aggregated[player][key] / c).toFixed(1) + '%';
                         } else if (key === 'Game Score') {
-                            aggregated[player][key] = Number(aggregated[player][key].toFixed(2));
+                            aggregated[player][key] = Number(gsSum.toFixed(2));
                         }
                     });
+
+                    // Lasketaan kauden Game Score / 60
+                    aggregated[player]['Game Score / 60'] = totalSecs > 0 ? Number((gsSum / (totalSecs / 3600)).toFixed(2)) : 0.0;
                 });
 
-                currentFilteredData = Object.values(aggregated);
+                baseData = Object.values(aggregated);
                 document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä";
             } else {
                 const [date, matchTeams] = selectedGame.split('___');
                 const [teamA, teamB] = matchTeams.split(' vs ');
                 
-                currentFilteredData = rawData.filter(row => {
+                baseData = rawData.filter(row => {
                     if (String(row['Date']) !== date) return false;
                     const t = row['Team'];
                     const o = row['Opponent'];
@@ -324,9 +370,16 @@
                 document.getElementById('tableTitle').innerText = `Pelaajatilastot - Peli (${date}: ${teamA} vs ${teamB})`;
             }
 
+            // Sovelletaan joukkuesuodatetta
+            if (selectedTeam !== 'all') {
+                currentFilteredData = baseData.filter(row => String(row['Team']) === selectedTeam);
+            } else {
+                currentFilteredData = baseData;
+            }
+
             currentSortColumn = null;
             renderTable();
-            renderCharts(selectedGame);
+            renderCharts(selectedGame, selectedTeam);
         }
 
         function sortTable(column) {
@@ -426,7 +479,7 @@
             document.getElementById('playerModal').classList.add('hidden');
         }
 
-        function renderCharts(selectedGame) {
+        function renderCharts(selectedGame, selectedTeam) {
             if (chart1Instance) chart1Instance.destroy();
             if (chart2Instance) chart2Instance.destroy();
             if (chart3Instance) chart3Instance.destroy();
@@ -434,13 +487,13 @@
             if (selectedGame === 'all') {
                 document.getElementById('chart1Title').innerText = "Maalit vs Odotetut maalit (xG)";
                 document.getElementById('chart2Title').innerText = "Laukaukset & CORSI-lukemat";
-                document.getElementById('chart3Title').innerText = "Top Game Score";
+                document.getElementById('chart3Title').innerText = "Top Game Score / 60";
 
                 const sortedByGoals = [...currentFilteredData].sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0)).slice(0, 10);
-                const sortedByGS = [...currentFilteredData].sort((a, b) => (Number(b['Game Score']) || 0) - (Number(a['Game Score']) || 0)).slice(0, 10);
+                const sortedByGS60 = [...currentFilteredData].sort((a, b) => (Number(b['Game Score / 60']) || 0) - (Number(a['Game Score / 60']) || 0)).slice(0, 10);
                 
                 const labels = sortedByGoals.map(d => d['Player']);
-                const gsLabels = sortedByGS.map(d => d['Player']);
+                const gsLabels = sortedByGS60.map(d => d['Player']);
                 
                 chart1Instance = new Chart(document.getElementById('chart1').getContext('2d'), {
                     type: 'bar',
@@ -467,7 +520,7 @@
                     type: 'bar',
                     data: {
                         labels: gsLabels,
-                        datasets: [{ label: 'Kokonais Game Score', data: sortedByGS.map(d => Number(d['Game Score']) || 0), backgroundColor: '#f59e0b' }]
+                        datasets: [{ label: 'Game Score / 60', data: sortedByGS60.map(d => Number(d['Game Score / 60']) || 0), backgroundColor: '#f59e0b' }]
                     },
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
                 });
@@ -483,13 +536,7 @@
                     const team = row['Team'];
                     if (!team || team === '-') return;
                     if (!teamStats[team]) {
-                        teamStats[team] = { 
-                            xg: 0, 
-                            corsiPlus: 0, 
-                            corsiMinus: 0, 
-                            foWon: 0, 
-                            foLost: 0 
-                        };
+                        teamStats[team] = { xg: 0, corsiPlus: 0, corsiMinus: 0, foWon: 0, foLost: 0 };
                     }
                     teamStats[team].xg += Number(row['xG (Expected goals)'] || row['xG']) || 0;
                     teamStats[team].corsiPlus += Number(row['CORSI+']) || 0;
