@@ -23,7 +23,7 @@
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
             <div>
                 <h1 class="text-xl font-black tracking-wider text-white uppercase">SDHL Game Stats</h1>
-                <p class="text-xs text-red-300">Ottelutilastot ja kehittyneet tilastot (Klikkaa pelaajaa nähdäksesi pelikohtaiset tiedot)</p>
+                <p class="text-xs text-red-300">Klikkaa otsikkoa lajitellaksesi • Klikkaa pelaajaa nähdäksesi pelit</p>
             </div>
             
             <div class="flex flex-wrap items-center gap-3">
@@ -48,7 +48,7 @@
         <!-- Tilastotaulukko -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden mb-8">
             <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
-                <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Pelaajatilastot (Kaikki pelit)</h2>
+                <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Pelaajatilastot (Kaikki pelit yhteensä)</h2>
                 <div class="flex gap-2">
                     <input type="text" id="playerSearch" placeholder="Hae pelaajaa..." class="bg-slate-950 border border-slate-700 text-xs text-white rounded px-3 py-1 focus:outline-none focus:border-red-500">
                     <button onclick="copyTable()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">Kopioi</button>
@@ -82,7 +82,7 @@
 
     </main>
 
-    <!-- Pelaajan pelikohtainen modaali (Ponnahdusikkuna) -->
+    <!-- Pelaajan pelikohtainen modaali -->
     <div id="playerModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             <div class="bg-slate-950 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
@@ -107,10 +107,11 @@
     <script>
         let rawData = [];
         let currentFilteredData = [];
+        let currentSortColumn = null;
+        let isAscending = false;
         let xgChartInstance = null;
         let corsiChartInstance = null;
 
-        // Apufunktio Excelin päivämäärän korjaukseen (Excel serial date -> YYYY-MM-DD)
         function formatExcelDate(serial) {
             if (!serial) return '-';
             if (typeof serial === 'string' && serial.includes('-')) return serial;
@@ -152,7 +153,6 @@
             
             rawData = XLSX.utils.sheet_to_json(worksheet, { defval: "-" });
             
-            // Korjataan päivämäärät kaikille riveille
             rawData.forEach(row => {
                 if (row['Date']) {
                     row['Date'] = formatExcelDate(row['Date']);
@@ -195,30 +195,60 @@
 
                     if (!aggregated[player]) {
                         aggregated[player] = { ...row };
-                        ['Goals', 'Assists', 'Points', 'Shots', 'Shots on goal', 'Hits', 'Penalty time', 'CORSI', 'CORSI+', 'CORSI-', 'Blocked shots'].forEach(col => {
-                            aggregated[player][col] = Number(row[col]) || 0;
+                        // Nollataan/alustetaan numerokentät oikein
+                        Object.keys(row).forEach(key => {
+                            if (key !== 'Home/away' && key !== 'Date' && key !== 'Opponent' && key !== 'Team' && key !== 'Player' && key !== 'Position') {
+                                let val = Number(row[key]);
+                                aggregated[player][key] = isNaN(val) ? 0 : val;
+                            }
                         });
-                        ['xG (Expected goals)'].forEach(col => {
-                            aggregated[player][col] = Number(row[col]) || 0;
-                        });
+                        aggregated['GamesPlayed'] = 1;
                     } else {
-                        ['Goals', 'Assists', 'Points', 'Shots', 'Shots on goal', 'Hits', 'Penalty time', 'CORSI', 'CORSI+', 'CORSI-', 'Blocked shots'].forEach(col => {
-                            aggregated[player][col] += Number(row[col]) || 0;
-                        });
-                        ['xG (Expected goals)'].forEach(col => {
-                            aggregated[player][col] += Number(row[col]) || 0;
+                        Object.keys(row).forEach(key => {
+                            if (key !== 'Home/away' && key !== 'Date' && key !== 'Opponent' && key !== 'Team' && key !== 'Player' && key !== 'Position') {
+                                let val = Number(row[key]);
+                                if (!isNaN(val)) {
+                                    aggregated[player][key] = (Number(aggregated[player][key]) || 0) + val;
+                                }
+                            }
                         });
                     }
                 });
                 currentFilteredData = Object.values(aggregated);
-                document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä (Klikkaa pelaajaa nähdäksesi pelit)";
+                document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä";
             } else {
                 currentFilteredData = rawData.filter(row => String(row['Game ID']) === String(selectedGame));
                 document.getElementById('tableTitle').innerText = `Pelaajatilastot - Peli #${selectedGame}`;
             }
 
+            currentSortColumn = null;
             renderTable();
             renderCharts();
+        }
+
+        function sortTable(column) {
+            if (currentSortColumn === column) {
+                isAscending = !isAscending;
+            } else {
+                currentSortColumn = column;
+                isAscending = false; // Oletuksena laskeva (suurin ensin)
+            }
+
+            currentFilteredData.sort((a, b) => {
+                let valA = a[column];
+                let valB = b[column];
+
+                if (valA === undefined) valA = 0;
+                if (valB === undefined) valB = 0;
+
+                if (!isNaN(valA) && !isNaN(valB)) {
+                    return isAscending ? valA - valB : valB - valA;
+                } else {
+                    return isAscending ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+                }
+            });
+
+            renderTable();
         }
 
         function renderTable() {
@@ -234,7 +264,7 @@
             const headers = Object.keys(currentFilteredData[0]);
             
             const headerTr = document.getElementById('tableHeader');
-            headerTr.innerHTML = headers.map(h => `<th class="px-3 py-2">${h}</th>`).join('');
+            headerTr.innerHTML = headers.map(h => `<th class="px-3 py-2 cursor-pointer hover:text-white underline" onclick="sortTable('${h}')">${h} ${currentSortColumn === h ? (isAscending ? '▲' : '▼') : ''}</th>`).join('');
 
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = filtered.map(row => {
@@ -242,6 +272,9 @@
                 return `<tr class="hover:bg-slate-800/50 transition">` + 
                     headers.map(h => {
                         let val = row[h] !== undefined ? row[h] : '-';
+                        if (typeof val === 'number' && !Number.isInteger(val)) {
+                            val = val.toFixed(2);
+                        }
                         if (h === 'Player') {
                             return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline" onclick="openPlayerModal('${playerName}')">${val}</td>`;
                         }
@@ -251,7 +284,6 @@
             }).join('');
         }
 
-        // Avaa pelaajan omat pelikohtaiset tilastot
         function openPlayerModal(playerName) {
             document.getElementById('modalPlayerName').innerText = `Pelaaja: ${playerName}`;
             const playerGames = rawData.filter(row => row['Player'] === playerName);
