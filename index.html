@@ -198,8 +198,11 @@
             rawData.forEach(row => {
                 const date = row['Date'] || '';
                 const opponent = row['Opponent'] || '';
+                const team = row['Team'] || '';
                 if (date && opponent && date !== '-') {
-                    gamesSet.add(`${date}___${opponent}`);
+                    // Luodaan molempiin suuntiin toimiva avain, jotta peli löytyy kumman tahansa joukkueen riviltä
+                    const sortedTeams = [team, opponent].sort().join(' vs ');
+                    gamesSet.add(`${date}___${sortedTeams}`);
                 }
             });
 
@@ -207,8 +210,8 @@
 
             select.innerHTML = '<option value="all">Kaikki pelit yhteensä (Kauden tilastot)</option>';
             gamesArray.forEach(gameStr => {
-                const [date, opponent] = gameStr.split('___');
-                select.innerHTML += `<option value="${gameStr}">${date} vs ${opponent}</option>`;
+                const [date, matchTeams] = gameStr.split('___');
+                select.innerHTML += `<option value="${gameStr}">${date}: ${matchTeams}</option>`;
             });
 
             select.addEventListener('change', filterData);
@@ -284,9 +287,18 @@
                 currentFilteredData = Object.values(aggregated);
                 document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä";
             } else {
-                const [date, opponent] = selectedGame.split('___');
-                currentFilteredData = rawData.filter(row => String(row['Date']) === date && String(row['Opponent']) === opponent);
-                document.getElementById('tableTitle').innerText = `Pelaajatilastot - Peli (${date} vs ${opponent})`;
+                const [date, matchTeams] = selectedGame.split('___');
+                const [teamA, teamB] = matchTeams.split(' vs ');
+                
+                // Haetaan molempien joukkueiden pelaajat tälle päivälle
+                currentFilteredData = rawData.filter(row => {
+                    if (String(row['Date']) !== date) return false;
+                    const t = row['Team'];
+                    const o = row['Opponent'];
+                    return (t === teamA && o === teamB) || (t === teamB && o === teamA);
+                });
+
+                document.getElementById('tableTitle').innerText = `Pelaajatilastot - Peli (${date}: ${teamA} vs ${teamB})`;
             }
 
             currentSortColumn = null;
@@ -329,7 +341,8 @@
             const filtered = currentFilteredData.filter(row => {
                 const name = String(row['Player'] || '').toLowerCase();
                 const pos = String(row['Position'] || '').toLowerCase();
-                return name.includes(searchTerm) || pos.includes(searchTerm);
+                const team = String(row['Team'] || '').toLowerCase();
+                return name.includes(searchTerm) || pos.includes(searchTerm) || team.includes(searchTerm);
             });
 
             const headers = Object.keys(currentFilteredData[0]);
@@ -395,7 +408,6 @@
             if (chart3Instance) chart3Instance.destroy();
 
             if (selectedGame === 'all') {
-                // Kausinäkymän kaaviot (top pelaajat)
                 document.getElementById('chart1Title').innerText = "Maalit vs Odotetut maalit (xG)";
                 document.getElementById('chart2Title').innerText = "Laukaukset & CORSI-lukemat";
                 document.getElementById('chart3Title').innerText = "Aloitukset (Faceoffs won)";
@@ -434,12 +446,10 @@
                 });
 
             } else {
-                // Joukkueiden välinen vertailu valitussa pelissä
                 document.getElementById('chart1Title').innerText = "Joukkueiden xG Vertailu";
                 document.getElementById('chart2Title').innerText = "Joukkueiden CORSI Vertailu";
                 document.getElementById('chart3Title').innerText = "Joukkueiden Aloitukset Vertailu";
 
-                // Lasketaan joukkueittain summat tästä pelistä
                 const teamStats = {};
                 currentFilteredData.forEach(row => {
                     const team = row['Team'];
