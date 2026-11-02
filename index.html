@@ -200,7 +200,6 @@
                 const opponent = row['Opponent'] || '';
                 const team = row['Team'] || '';
                 if (date && opponent && date !== '-') {
-                    // Luodaan molempiin suuntiin toimiva avain, jotta peli löytyy kumman tahansa joukkueen riviltä
                     const sortedTeams = [team, opponent].sort().join(' vs ');
                     gamesSet.add(`${date}___${sortedTeams}`);
                 }
@@ -290,7 +289,6 @@
                 const [date, matchTeams] = selectedGame.split('___');
                 const [teamA, teamB] = matchTeams.split(' vs ');
                 
-                // Haetaan molempien joukkueiden pelaajat tälle päivälle
                 currentFilteredData = rawData.filter(row => {
                     if (String(row['Date']) !== date) return false;
                     const t = row['Team'];
@@ -399,6 +397,7 @@
         }
 
         function closeModal() {
+            document.getElementById('modalPlayerName').innerText = '';
             document.getElementById('playerModal').classList.add('hidden');
         }
 
@@ -447,25 +446,49 @@
 
             } else {
                 document.getElementById('chart1Title').innerText = "Joukkueiden xG Vertailu";
-                document.getElementById('chart2Title').innerText = "Joukkueiden CORSI Vertailu";
-                document.getElementById('chart3Title').innerText = "Joukkueiden Aloitukset Vertailu";
+                document.getElementById('chart2Title').innerText = "Joukkueiden Corsi For (%)";
+                document.getElementById('chart3Title').innerText = "Joukkueiden Aloitusvoitto-%";
 
                 const teamStats = {};
+
+                // Lasketaan datasta oikeasti summatietojen kautta joukkuekohtaiset prosentit
                 currentFilteredData.forEach(row => {
                     const team = row['Team'];
                     if (!team || team === '-') return;
                     if (!teamStats[team]) {
-                        teamStats[team] = { xg: 0, corsi: 0, faceoffs: 0 };
+                        teamStats[team] = { 
+                            xg: 0, 
+                            corsiPlus: 0, 
+                            corsiMinus: 0, 
+                            foWon: 0, 
+                            foLost: 0 
+                        };
                     }
                     teamStats[team].xg += Number(row['xG (Expected goals)'] || row['xG']) || 0;
-                    teamStats[team].corsi += Number(row['CORSI']) || 0;
-                    teamStats[team].faceoffs += Number(row['Faceoffs won']) || 0;
+                    teamStats[team].corsiPlus += Number(row['CORSI+']) || 0;
+                    teamStats[team].corsiMinus += Number(row['CORSI-']) || 0;
+                    teamStats[team].foWon += Number(row['Faceoffs won']) || 0;
+                    teamStats[team].foLost += Number(row['Faceoffs lost']) || 0;
                 });
 
                 const teams = Object.keys(teamStats);
                 const xgData = teams.map(t => teamStats[t].xg);
-                const corsiData = teams.map(t => teamStats[t].corsi);
-                const faceoffData = teams.map(t => teamStats[t].faceoffs);
+                
+                // Lasketaan Corsi %: CORSI+ / (CORSI+ + CORSI-)
+                const corsiPctData = teams.map(t => {
+                    const plus = teamStats[t].corsiPlus;
+                    const minus = teamStats[t].corsiMinus;
+                    const total = plus + minus;
+                    return total > 0 ? Number(((plus / total) * 100).toFixed(1)) : 0;
+                });
+
+                // Lasketaan Aloitus %: Voitetut / (Voitetut + Hävityt)
+                const faceoffPctData = teams.map(t => {
+                    const won = teamStats[t].foWon;
+                    const lost = teamStats[t].foLost;
+                    const total = won + lost;
+                    return total > 0 ? Number(((won / total) * 100).toFixed(1)) : 0;
+                });
 
                 chart1Instance = new Chart(document.getElementById('chart1').getContext('2d'), {
                     type: 'bar',
@@ -480,18 +503,18 @@
                     type: 'bar',
                     data: {
                         labels: teams,
-                        datasets: [{ label: 'CORSI', data: corsiData, backgroundColor: '#10b981' }]
+                        datasets: [{ label: 'Corsi For (%)', data: corsiPctData, backgroundColor: '#10b981' }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: function(value) { return value + '%'; } } } } } }
                 });
 
                 chart3Instance = new Chart(document.getElementById('chart3').getContext('2d'), {
                     type: 'bar',
                     data: {
                         labels: teams,
-                        datasets: [{ label: 'Faceoffs Won', data: faceoffData, backgroundColor: '#f59e0b' }]
+                        datasets: [{ label: 'Faceoffs Won (%)', data: faceoffPctData, backgroundColor: '#f59e0b' }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: function(value) { return value + '%'; } } } } } }
                 });
             }
         }
