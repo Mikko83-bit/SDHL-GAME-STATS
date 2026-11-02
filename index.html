@@ -15,12 +15,10 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
         
-        /* Lukitut sarakkeet taulukossa */
         .sticky-col-team { position: sticky; left: 0px; z-index: 20; background-color: #0f172a; }
         .sticky-col-shirt { position: sticky; left: 65px; z-index: 20; background-color: #0f172a; }
         .sticky-col-player { position: sticky; left: 130px; z-index: 20; background-color: #0f172a; box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.5); }
         
-        /* Otsikoiden taustavärit lukituille sarakkeille */
         thead .sticky-col-team, thead .sticky-col-shirt, thead .sticky-col-player { background-color: #020617; }
     </style>
 </head>
@@ -72,18 +70,27 @@
             </div>
         </div>
 
-        <!-- Kaaviot -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Kaaviot / Vertailut -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Kaavio 1: xG Vertailu -->
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalit vs Odotetut maalit (xG)</h3>
+                <h3 id="chart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalit vs Odotetut maalit (xG)</h3>
                 <div class="relative h-72">
-                    <canvas id="xgChart"></canvas>
+                    <canvas id="chart1"></canvas>
                 </div>
             </div>
+            <!-- Kaavio 2: Corsi Vertailu -->
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Laukaukset & CORSI-lukemat</h3>
+                <h3 id="chart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Laukaukset & CORSI-lukemat</h3>
                 <div class="relative h-72">
-                    <canvas id="corsiChart"></canvas>
+                    <canvas id="chart2"></canvas>
+                </div>
+            </div>
+            <!-- Kaavio 3: Faceoffs Vertailu -->
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 id="chart3Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Aloitukset (Faceoffs)</h3>
+                <div class="relative h-72">
+                    <canvas id="chart3"></canvas>
                 </div>
             </div>
         </div>
@@ -117,8 +124,9 @@
         let currentFilteredData = [];
         let currentSortColumn = null;
         let isAscending = false;
-        let xgChartInstance = null;
-        let corsiChartInstance = null;
+        let chart1Instance = null;
+        let chart2Instance = null;
+        let chart3Instance = null;
 
         function formatExcelDate(serial) {
             if (!serial) return '-';
@@ -136,9 +144,7 @@
         function timeToSecs(tStr) {
             if (!tStr || typeof tStr !== 'string' || !tStr.includes(':')) return 0;
             const parts = tStr.split(':');
-            const m = parseInt(parts[0], 10) || 0;
-            const s = parseInt(parts[1], 10) || 0;
-            return m * 60 + s;
+            return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
         }
 
         function secsToTime(secs) {
@@ -285,7 +291,7 @@
 
             currentSortColumn = null;
             renderTable();
-            renderCharts();
+            renderCharts(selectedGame);
         }
 
         function sortTable(column) {
@@ -383,42 +389,101 @@
             document.getElementById('playerModal').classList.add('hidden');
         }
 
-        function renderCharts() {
-            if (currentFilteredData.length === 0) return;
+        function renderCharts(selectedGame) {
+            if (chart1Instance) chart1Instance.destroy();
+            if (chart2Instance) chart2Instance.destroy();
+            if (chart3Instance) chart3Instance.destroy();
 
-            const sortedByGoals = [...currentFilteredData].sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0)).slice(0, 10);
-            
-            const labels = sortedByGoals.map(d => d['Player']);
-            const goals = sortedByGoals.map(d => Number(d['Goals']) || 0);
-            const xgs = sortedByGoals.map(d => Number(d['xG (Expected goals)'] || d['xG']) || 0);
-            const corsi = sortedByGoals.map(d => Number(d['CORSI']) || 0);
+            if (selectedGame === 'all') {
+                // Kausinäkymän kaaviot (top pelaajat)
+                document.getElementById('chart1Title').innerText = "Maalit vs Odotetut maalit (xG)";
+                document.getElementById('chart2Title').innerText = "Laukaukset & CORSI-lukemat";
+                document.getElementById('chart3Title').innerText = "Aloitukset (Faceoffs won)";
 
-            const ctxXg = document.getElementById('xgChart').getContext('2d');
-            if (xgChartInstance) xgChartInstance.destroy();
-            xgChartInstance = new Chart(ctxXg, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'Maalit', data: goals, backgroundColor: '#ef4444' },
-                        { label: 'xG (Odotetut maalit)', data: xgs, backgroundColor: '#3b82f6' }
-                    ]
-                },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
-            });
+                const sortedByGoals = [...currentFilteredData].sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0)).slice(0, 10);
+                const labels = sortedByGoals.map(d => d['Player']);
+                
+                chart1Instance = new Chart(document.getElementById('chart1').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: 'Maalit', data: sortedByGoals.map(d => Number(d['Goals']) || 0), backgroundColor: '#ef4444' },
+                            { label: 'xG', data: sortedByGoals.map(d => Number(d['xG (Expected goals)'] || d['xG']) || 0), backgroundColor: '#3b82f6' }
+                        ]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                });
 
-            const ctxCorsi = document.getElementById('corsiChart').getContext('2d');
-            if (corsiChartInstance) corsiChartInstance.destroy();
-            corsiChartInstance = new Chart(ctxCorsi, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'CORSI', data: corsi, backgroundColor: '#10b981' }
-                    ]
-                },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
-            });
+                chart2Instance = new Chart(document.getElementById('chart2').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{ label: 'CORSI', data: sortedByGoals.map(d => Number(d['CORSI']) || 0), backgroundColor: '#10b981' }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                });
+
+                chart3Instance = new Chart(document.getElementById('chart3').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{ label: 'Faceoffs Won', data: sortedByGoals.map(d => Number(d['Faceoffs won']) || 0), backgroundColor: '#f59e0b' }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                });
+
+            } else {
+                // Joukkueiden välinen vertailu valitussa pelissä
+                document.getElementById('chart1Title').innerText = "Joukkueiden xG Vertailu";
+                document.getElementById('chart2Title').innerText = "Joukkueiden CORSI Vertailu";
+                document.getElementById('chart3Title').innerText = "Joukkueiden Aloitukset Vertailu";
+
+                // Lasketaan joukkueittain summat tästä pelistä
+                const teamStats = {};
+                currentFilteredData.forEach(row => {
+                    const team = row['Team'];
+                    if (!team || team === '-') return;
+                    if (!teamStats[team]) {
+                        teamStats[team] = { xg: 0, corsi: 0, faceoffs: 0 };
+                    }
+                    teamStats[team].xg += Number(row['xG (Expected goals)'] || row['xG']) || 0;
+                    teamStats[team].corsi += Number(row['CORSI']) || 0;
+                    teamStats[team].faceoffs += Number(row['Faceoffs won']) || 0;
+                });
+
+                const teams = Object.keys(teamStats);
+                const xgData = teams.map(t => teamStats[t].xg);
+                const corsiData = teams.map(t => teamStats[t].corsi);
+                const faceoffData = teams.map(t => teamStats[t].faceoffs);
+
+                chart1Instance = new Chart(document.getElementById('chart1').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: teams,
+                        datasets: [{ label: 'xG (Expected Goals)', data: xgData, backgroundColor: '#3b82f6' }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                });
+
+                chart2Instance = new Chart(document.getElementById('chart2').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: teams,
+                        datasets: [{ label: 'CORSI', data: corsiData, backgroundColor: '#10b981' }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                });
+
+                chart3Instance = new Chart(document.getElementById('chart3').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: teams,
+                        datasets: [{ label: 'Faceoffs Won', data: faceoffData, backgroundColor: '#f59e0b' }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } } }
+                });
+            }
         }
 
         function copyTable() {
