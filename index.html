@@ -1,588 +1,296 @@
 <!DOCTYPE html>
-<html lang="fi" class="h-full bg-slate-950 text-slate-100">
+<html lang="fi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ice Hockey Advanced Analytics Dashboard</title>
+    <title>SDHL Game Stats Dashboard</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- SheetJS for Excel / CSV Parsing -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <!-- Chart.js for Advanced Visualizations -->
+    <!-- SheetJS Excel reader -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Chart.js for graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- FontAwesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        nhl: {
-                            red: '#700000',
-                            darkred: '#4a0000',
-                            accent: '#cc0000',
-                            gold: '#c5a059',
-                            dark: '#0f172a'
-                        }
-                    }
-                }
-            }
-        }
-    </script>
     <style>
-        /* Custom scrollbars for clean table look */
-        ::-webkit-scrollbar {
-            height: 8px;
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0f172a;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #475569;
-        }
-        .stats-table th {
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
     </style>
 </head>
-<body class="h-full flex flex-col font-sans antialiased selection:bg-red-800 selection:text-white">
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
 
-    <!-- Top Header Banner matching reference image style -->
-    <header class="bg-gradient-to-r from-nhl-darkred via-nhl-red to-nhl-darkred border-b border-red-900 shadow-lg sticky top-0 z-50">
+    <!-- Yläpalkki (Natural Stat Trick -tyyli) -->
+    <header class="bg-red-950 border-b border-red-900 shadow-lg">
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
-            <div class="flex items-center space-x-3">
-                <i class="fa-solid fa-hockey-puck text-2xl text-red-400 animate-pulse"></i>
-                <h1 class="text-xl md:text-2xl font-bold tracking-wider text-white uppercase font-mono" id="dashboardTitle">
-                    Hurricanes - Individual [-]
-                </h1>
+            <div>
+                <h1 class="text-xl font-black tracking-wider text-white uppercase">SDHL Game Stats</h1>
+                <p class="text-xs text-red-300">Ottelutilastot ja kehittyneet tilastot</p>
             </div>
             
-            <div class="flex items-center gap-2">
-                <!-- Dropzone / File input trigger -->
-                <label class="cursor-pointer bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 transition">
-                    <i class="fa-solid fa-file-excel text-green-500"></i>
-                    <span>Tuo Excel / CSV</span>
-                    <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" class="hidden" />
-                </label>
-                <button onclick="resetToDemoData()" class="bg-red-900 hover:bg-red-800 text-white px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-1 border border-red-700 transition" title="Palauta demo-data">
-                    <i class="fa-solid fa-rotate-left"></i> Demo-data
-                </button>
+            <!-- Suodattimet ja tiedoston tuonti -->
+            <div class="flex flex-wrap items-center gap-3">
+                <div>
+                    <label class="block text-[10px] text-red-200 uppercase font-bold">Valitse näkymä / peli</label>
+                    <select id="gameFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
+                        <option value="all">Kaikki pelit yhteensä (Kaustilastot)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] text-red-200 uppercase font-bold">Tuo uusi Excel</label>
+                    <input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" class="text-xs text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-red-900 file:text-white hover:file:bg-red-800 cursor-pointer">
+                </div>
             </div>
         </div>
     </header>
 
-    <!-- Main Workspace Area -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 space-y-6">
+    <!-- Pääsisältö -->
+    <main class="max-w-[98%] mx-auto px-2 py-6">
 
-        <!-- Controls Row: Game Situation Filters & Search -->
-        <div class="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-slate-900 p-3 rounded-lg border border-slate-800 shadow">
-            
-            <!-- Game Situation State Filter (All, EV, 5v5, 5v4 PP, 4v5 PK) -->
-            <div class="flex flex-wrap items-center gap-1.5" id="strengthFilterContainer">
-                <span class="text-xs font-bold text-slate-400 mr-2 uppercase tracking-wider">Tilanne:</span>
-                <button onclick="setStrength('All')" class="strength-btn px-3 py-1 text-xs rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 font-mono font-medium transition" data-strength="All">All</button>
-                <button onclick="setStrength('EV')" class="strength-btn px-3 py-1 text-xs rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 font-mono font-medium transition" data-strength="EV">EV</button>
-                <button onclick="setStrength('5v5')" class="strength-btn active border-red-600 bg-red-900/60 text-white font-bold px-3 py-1 text-xs rounded font-mono transition" data-strength="5v5">5v5</button>
-                <button onclick="setStrength('5v4 PP')" class="strength-btn px-3 py-1 text-xs rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 font-mono font-medium transition" data-strength="5v4 PP">5v4 PP</button>
-                <button onclick="setStrength('4v5 PK')" class="strength-btn px-3 py-1 text-xs rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 font-mono font-medium transition" data-strength="4v5 PK">4v5 PK</button>
-            </div>
-
-            <!-- Search Filter Input & Quick Stats Counter -->
-            <div class="flex items-center gap-3">
-                <div class="relative flex-1 md:w-64">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
-                    <input type="text" id="searchInput" placeholder="Etsi pelaajaa tai pelipaikkaa..." oninput="applyFilters()" 
-                        class="w-full bg-slate-950 border border-slate-800 rounded pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-red-600 transition">
-                </div>
-                <div class="text-xs text-slate-400 bg-slate-950 px-3 py-1.5 rounded border border-slate-800 font-mono whitespace-nowrap">
-                    Pelaajia: <span id="rowCount" class="text-white font-bold">0</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Notification / Toast Container -->
-        <div id="toastMessage" class="hidden p-3 bg-emerald-900/80 border border-emerald-600 text-emerald-200 text-xs rounded shadow transition-all"></div>
-
-        <!-- Main Data Table Container matching NST/MoneyPuck aesthetics -->
-        <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden flex flex-col">
-            
-            <div class="p-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
-                <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wide flex items-center gap-2">
-                    <i class="fa-solid fa-table-cells text-red-500"></i> Skaters Individual Statistics
-                </h2>
-                <!-- Export buttons matching reference image footer -->
-                <div class="flex items-center gap-2">
-                    <button onclick="copyTableToClipboard()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-2.5 py-1 rounded text-xs flex items-center gap-1 font-mono transition">
-                        <i class="fa-regular fa-copy text-slate-400"></i> COPY
-                    </button>
-                    <button onclick="exportToCSV()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-2.5 py-1 rounded text-xs flex items-center gap-1 font-mono transition">
-                        <i class="fa-solid fa-file-csv text-green-400"></i> CSV
-                    </button>
+        <!-- Tilastotaulukko -->
+        <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden mb-8">
+            <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
+                <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Pelaajatilastot (Kaikki pelit)</h2>
+                <div class="flex gap-2">
+                    <input type="text" id="playerSearch" placeholder="Hae pelaajaa..." class="bg-slate-950 border border-slate-700 text-xs text-white rounded px-3 py-1 focus:outline-none focus:border-red-500">
+                    <button onclick="copyTable()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">Kopioi</button>
+                    <button onclick="exportCSV()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">CSV</button>
                 </div>
             </div>
 
-            <!-- Scrollable Table Wrapper -->
-            <div class="overflow-x-auto max-h-[550px] relative">
-                <table class="w-full text-left text-xs font-mono whitespace-nowrap stats-table" id="statsTable">
-                    <thead class="bg-slate-950 text-slate-400 uppercase text-[11px] border-b border-slate-800 tracking-wider">
-                        <tr id="tableHeaderRow">
-                            <!-- Populated Dynamically with clickable sort headers -->
-                        </tr>
+            <!-- Taulukko -->
+            <div class="overflow-x-auto custom-scrollbar max-h-[600px]">
+                <table id="statsTable" class="w-full text-left border-collapse text-xs whitespace-nowrap">
+                    <thead id="tableHeader" class="bg-slate-950 text-slate-400 uppercase text-[10px] sticky top-0 z-10 border-b border-slate-800">
+                        <!-- Luodaan dynaamisesti -->
                     </thead>
-                    <tbody id="tableBody" class="divide-y divide-slate-800/60 bg-slate-900/80 text-slate-200">
-                        <!-- Data rows injected dynamically -->
+                    <tbody id="tableBody" class="divide-y divide-slate-800/60">
+                        <!-- Datan lataus -->
                     </tbody>
                 </table>
             </div>
-
-            <!-- Drag & Drop Overlay Zone -->
-            <div id="dropZone" class="hidden border-2 border-dashed border-red-500 bg-red-950/40 p-8 text-center text-slate-300 transition">
-                <i class="fa-solid fa-cloud-arrow-up text-3xl text-red-400 mb-2"></i>
-                <p class="font-bold">Pudota Excel (.xlsx) tai CSV -tiedosto tähän lataaksesi tilastot</p>
-            </div>
         </div>
 
-        <!-- Visual Analytics Dashboard Section -->
+        <!-- Kaaviot / Visualisoinnit -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            <!-- Chart 1: Expected Goals (ixG) vs Actual Goals -->
-            <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 shadow flex flex-col">
-                <div class="flex justify-between items-center mb-3">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                        <i class="fa-solid fa-bullseye text-red-500"></i> Odotetut Maalit (ixG) vs Toteutuneet Maalit
-                    </h3>
-                    <span class="text-[10px] text-slate-500 font-mono">Laukauksien laatu vs viimeistely</span>
-                </div>
-                <div class="relative flex-1 min-h-[260px]">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalit vs Odotetut maalit (xG)</h3>
+                <div class="relative h-72">
                     <canvas id="xgChart"></canvas>
                 </div>
             </div>
-
-            <!-- Chart 2: Corsi & High-Danger Chances (iCF vs iHDCF) -->
-            <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 shadow flex flex-col">
-                <div class="flex justify-between items-center mb-3">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                        <i class="fa-solid fa-chart-bar text-yellow-500"></i> Laukaisuhallinta (iCF) & Vaaralliset Paikat (iHDCF)
-                    </h3>
-                    <span class="text-[10px] text-slate-500 font-mono">Pelaajakohtainen luonti</span>
-                </div>
-                <div class="relative flex-1 min-h-[260px]">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Laukaukset & CORSI-lukemat</h3>
+                <div class="relative h-72">
                     <canvas id="corsiChart"></canvas>
                 </div>
             </div>
-
-            <!-- Chart 3: Game Momentum / Shot Timeline Simulation -->
-            <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 shadow lg:col-span-2">
-                <div class="flex justify-between items-center mb-3">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                        <i class="fa-solid fa-chart-line text-blue-500"></i> Ottelun Pelinhallinnan Kertymä (Momentum Timeline)
-                    </h3>
-                    <span class="text-[10px] text-slate-500 font-mono">Erittäinen kumulatiivinen laukausuhka (xG)</span>
-                </div>
-                <div class="relative h-64">
-                    <canvas id="timelineChart"></canvas>
-                </div>
-            </div>
-
         </div>
 
     </main>
 
-    <!-- Footer -->
-    <footer class="bg-slate-950 border-t border-slate-800 py-4 text-center text-xs text-slate-500 mt-8">
-        <p>Jääkiekon kehittynyt tilasto-ohjelmisto &copy; 2026. Natural Stat Trick & MoneyPuck -yhteensopiva visualisointi.</p>
-    </footer>
-
-    <!-- JavaScript Logic & App Data -->
     <script>
-        // Columns list matching exact order and names from reference screenshot
-        const COLUMNS = [
-            "Player", "Position", "TOI", "Goals", "Total Assists", "First Assists", "Second Assists", 
-            "Total Points", "Shots", "SH%", "ixG", "iCF", "iSCF", "iHDCF", "Rush Attempts", 
-            "Rebound Attempts", "Rebounds Created", "PIM", "Total Penalties", "Minor", "Major", 
-            "Misconduct", "Penalties Drawn", "Giveaways", "Takeaways", "Hits", "Hits Taken", 
-            "Shots Blocked", "Faceoffs Won", "Faceoffs Lost", "Faceoffs %"
-        ];
-
-        // Demo data set modeled after Carolina Hurricanes players from the reference image
-        const DEMO_DATA = {
-            "5v5": [
-                { "Player": "Jordan Martinook", "Position": "L", "TOI": "11:16", "Goals": 0, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 0, "Shots": 1, "SH%": 0, "ixG": 0.36, "iCF": 2, "iSCF": 2, "iHDCF": 1, "Rush Attempts": 0, "Rebound Attempts": 1, "Rebounds Created": 1, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 1, "Giveaways": 0, "Takeaways": 0, "Hits": 2, "Hits Taken": 4, "Shots Blocked": 0, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "Seth Jarvis", "Position": "R", "TOI": "12:04", "Goals": 0, "Total Assists": 1, "First Assists": 1, "Second Assists": 0, "Total Points": 1, "Shots": 1, "SH%": 0, "ixG": 0.29, "iCF": 5, "iSCF": 2, "iHDCF": 2, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 2, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 0, "Takeaways": 0, "Hits": 1, "Hits Taken": 2, "Shots Blocked": 2, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "Nikolaj Ehlers", "Position": "L", "TOI": "9:40", "Goals": 0, "Total Assists": 1, "First Assists": 0, "Second Assists": 1, "Total Points": 1, "Shots": 3, "SH%": 0, "ixG": 0.24, "iCF": 4, "iSCF": 3, "iHDCF": 1, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 0, "Takeaways": 0, "Hits": 0, "Hits Taken": 1, "Shots Blocked": 0, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "Nicolas Deslauriers", "Position": "L", "TOI": "10:55", "Goals": 0, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 0, "Shots": 1, "SH%": 0, "ixG": 0.21, "iCF": 3, "iSCF": 2, "iHDCF": 1, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 2, "Total Penalties": 1, "Minor": 1, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 0, "Takeaways": 1, "Hits": 2, "Hits Taken": 0, "Shots Blocked": 1, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "Logan Stankoven", "Position": "C", "TOI": "11:30", "Goals": 1, "Total Assists": 1, "First Assists": 0, "Second Assists": 1, "Total Points": 2, "Shots": 3, "SH%": 33.33, "ixG": 0.16, "iCF": 3, "iSCF": 2, "iHDCF": 1, "Rush Attempts": 0, "Rebound Attempts": 1, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 0, "Takeaways": 0, "Hits": 0, "Hits Taken": 0, "Shots Blocked": 0, "Faceoffs Won": 8, "Faceoffs Lost": 6, "Faceoffs %": 57.14 },
-                { "Player": "Sean Walker", "Position": "D", "TOI": "19:00", "Goals": 1, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 1, "Shots": 4, "SH%": 25, "ixG": 0.16, "iCF": 11, "iSCF": 2, "iHDCF": 0, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 1, "Takeaways": 0, "Hits": 0, "Hits Taken": 2, "Shots Blocked": 0, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "Jesperi Kotkaniemi", "Position": "C", "TOI": "10:58", "Goals": 1, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 1, "Shots": 1, "SH%": 100, "ixG": 0.15, "iCF": 1, "iSCF": 1, "iHDCF": 1, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 2, "Takeaways": 0, "Hits": 0, "Hits Taken": 2, "Shots Blocked": 1, "Faceoffs Won": 6, "Faceoffs Lost": 4, "Faceoffs %": 60 },
-                { "Player": "Sebastian Aho", "Position": "C", "TOI": "14:28", "Goals": 0, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 0, "Shots": 0, "SH%": "-", "ixG": 0.15, "iCF": 2, "iSCF": 2, "iHDCF": 2, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 1, "Giveaways": 1, "Takeaways": 3, "Hits": 0, "Hits Taken": 3, "Shots Blocked": 0, "Faceoffs Won": 9, "Faceoffs Lost": 1, "Faceoffs %": 90 },
-                { "Player": "Eric Robinson", "Position": "L", "TOI": "13:01", "Goals": 0, "Total Assists": 1, "First Assists": 1, "Second Assists": 0, "Total Points": 1, "Shots": 2, "SH%": 0, "ixG": 0.13, "iCF": 2, "iSCF": 1, "iHDCF": 1, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 1, "Takeaways": 0, "Hits": 0, "Hits Taken": 1, "Shots Blocked": 0, "Faceoffs Won": 0, "Faceoffs Lost": 1, "Faceoffs %": 0 },
-                { "Player": "Andrei Svechnikov", "Position": "R", "TOI": "13:28", "Goals": 0, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 0, "Shots": 2, "SH%": 0, "ixG": 0.11, "iCF": 2, "iSCF": 2, "iHDCF": 0, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 2, "Total Penalties": 1, "Minor": 1, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 0, "Takeaways": 0, "Hits": 4, "Hits Taken": 0, "Shots Blocked": 1, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "William Carrier", "Position": "L", "TOI": "12:58", "Goals": 0, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 0, "Shots": 0, "SH%": "-", "ixG": 0.11, "iCF": 1, "iSCF": 1, "iHDCF": 1, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 0, "Takeaways": 1, "Hits": 1, "Hits Taken": 2, "Shots Blocked": 0, "Faceoffs Won": 1, "Faceoffs Lost": 0, "Faceoffs %": 100 },
-                { "Player": "Mark Jankowski", "Position": "L", "TOI": "10:19", "Goals": 0, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 0, "Shots": 0, "SH%": "-", "ixG": 0.08, "iCF": 1, "iSCF": 1, "iHDCF": 0, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 2, "Takeaways": 0, "Hits": 0, "Hits Taken": 3, "Shots Blocked": 0, "Faceoffs Won": 3, "Faceoffs Lost": 8, "Faceoffs %": 27.27 },
-                { "Player": "Juuso Välimäki", "Position": "D", "TOI": "13:01", "Goals": 1, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 1, "Shots": 2, "SH%": 50, "ixG": 0.07, "iCF": 3, "iSCF": 1, "iHDCF": 0, "Rush Attempts": 0, "Rebound Attempts": 1, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 1, "Giveaways": 1, "Takeaways": 0, "Hits": 0, "Hits Taken": 3, "Shots Blocked": 0, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "Jaccob Slavin", "Position": "D", "TOI": "16:33", "Goals": 0, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 0, "Shots": 0, "SH%": "-", "ixG": 0.04, "iCF": 1, "iSCF": 0, "iHDCF": 0, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 1, "Takeaways": 0, "Hits": 0, "Hits Taken": 0, "Shots Blocked": 2, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "Jackson Blake", "Position": "R", "TOI": "10:46", "Goals": 0, "Total Assists": 1, "First Assists": 1, "Second Assists": 0, "Total Points": 1, "Shots": 0, "SH%": "-", "ixG": 0.02, "iCF": 2, "iSCF": 0, "iHDCF": 0, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 0, "Takeaways": 0, "Hits": 0, "Hits Taken": 2, "Shots Blocked": 0, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "K'Andre Miller", "Position": "D", "TOI": "20:12", "Goals": 0, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 0, "Shots": 1, "SH%": 0, "ixG": 0.01, "iCF": 2, "iSCF": 0, "iHDCF": 0, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 2, "Total Penalties": 1, "Minor": 1, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 3, "Takeaways": 0, "Hits": 1, "Hits Taken": 1, "Shots Blocked": 1, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "Shayne Gostisbehere", "Position": "D", "TOI": "13:07", "Goals": 0, "Total Assists": 2, "First Assists": 1, "Second Assists": 1, "Total Points": 2, "Shots": 1, "SH%": 0, "ixG": 0.01, "iCF": 3, "iSCF": 1, "iHDCF": 0, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 1, "Giveaways": 0, "Takeaways": 1, "Hits": 1, "Hits Taken": 2, "Shots Blocked": 0, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" },
-                { "Player": "Jalen Chatfield", "Position": "D", "TOI": "14:15", "Goals": 0, "Total Assists": 0, "First Assists": 0, "Second Assists": 0, "Total Points": 0, "Shots": 0, "SH%": "-", "ixG": 0.00, "iCF": 0, "iSCF": 0, "iHDCF": 0, "Rush Attempts": 0, "Rebound Attempts": 0, "Rebounds Created": 0, "PIM": 0, "Total Penalties": 0, "Minor": 0, "Major": 0, "Misconduct": 0, "Penalties Drawn": 0, "Giveaways": 2, "Takeaways": 0, "Hits": 0, "Hits Taken": 2, "Shots Blocked": 0, "Faceoffs Won": 0, "Faceoffs Lost": 0, "Faceoffs %": "-" }
-            ]
-        };
-
-        // State Variables
-        let currentRawData = [...DEMO_DATA["5v5"]];
-        let filteredData = [...currentRawData];
-        let currentSortColumn = "ixG";
-        let currentSortDirection = "desc";
-        let selectedStrength = "5v5";
-
-        // Chart Instances
+        let rawData = [];
+        let currentFilteredData = [];
         let xgChartInstance = null;
         let corsiChartInstance = null;
-        let timelineChartInstance = null;
 
-        // On Page Load Initialization
-        window.onload = function() {
-            renderTableHeader();
-            applyFilters();
-            setupFileUploadListeners();
-            initCharts();
-        };
-
-        // Render Clickable Headers with Sorting Indicators
-        function renderTableHeader() {
-            const tr = document.getElementById('tableHeaderRow');
-            tr.innerHTML = COLUMNS.map(col => {
-                const isSorted = currentSortColumn === col;
-                const arrow = isSorted 
-                    ? (currentSortDirection === 'asc' ? '▲' : '▼') 
-                    : '<span class="text-slate-600 opacity-0 group-hover:opacity-100">↕</span>';
-                
-                return `
-                    <th onclick="sortTable('${col}')" class="px-3 py-2.5 cursor-pointer hover:bg-slate-900 border-r border-slate-800/50 select-none group transition">
-                        <div class="flex items-center justify-between gap-1">
-                            <span>${col}</span>
-                            <span class="text-[10px] text-red-400 font-bold">${arrow}</span>
-                        </div>
-                    </th>
-                `;
-            }).join('');
-        }
-
-        // Apply Search Filter & Re-render
-        function applyFilters() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            
-            filteredData = currentRawData.filter(row => {
-                const playerMatch = row["Player"] ? String(row["Player"]).toLowerCase().includes(searchTerm) : false;
-                const posMatch = row["Position"] ? String(row["Position"]).toLowerCase().includes(searchTerm) : false;
-                return playerMatch || posMatch;
-            });
-
-            sortData();
-            renderTableBody();
-            updateCharts();
-        }
-
-        // Change Situation Strength State (Simulated recalculation for demo)
-        function setStrength(strength) {
-            selectedStrength = strength;
-            document.querySelectorAll('.strength-btn').forEach(btn => {
-                if (btn.dataset.strength === strength) {
-                    btn.className = "strength-btn active border-red-600 bg-red-900/60 text-white font-bold px-3 py-1 text-xs rounded font-mono transition";
+        // Ladataan automaattisesti sama Excel jos se on samassa kansiossa, tai näytetään tyhjä
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('Sdhl Game score 2026-2027.xlsx');
+                if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer();
+                    processExcelData(arrayBuffer);
                 } else {
-                    btn.className = "strength-btn px-3 py-1 text-xs rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono font-medium transition";
+                    console.log('Exceliä ei löytynyt suoraan polusta, odotetaan tiedoston latausta.');
                 }
-            });
-
-            // If strength changes, scale some numbers slightly to simulate different states
-            currentRawData = DEMO_DATA["5v5"].map(player => {
-                const factor = strength === 'All' ? 1.3 : (strength === '5v4 PP' ? 0.3 : (strength === '4v5 PK' ? 0.2 : 1.0));
-                return {
-                    ...player,
-                    iCF: Math.round(player.iCF * factor),
-                    ixG: parseFloat((player.ixG * factor).toFixed(2)),
-                    Shots: Math.round(player.Shots * factor)
-                };
-            });
-
-            applyFilters();
-            showToast(`Vaihdetut pelitilanne-tilastot: ${strength}`);
-        }
-
-        // Sort Data Logic
-        function sortTable(columnName) {
-            if (currentSortColumn === columnName) {
-                currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
-            } else {
-                currentSortColumn = columnName;
-                currentSortDirection = 'desc'; // Default to high-to-low for stats
+            } catch (e) {
+                console.log('Automaattinen lataus epäonnistui, voit ladata tiedoston manuaalisesti.');
             }
-            renderTableHeader();
-            sortData();
-            renderTableBody();
-        }
+        });
 
-        function sortData() {
-            filteredData.sort((a, b) => {
-                let valA = a[currentSortColumn];
-                let valB = b[currentSortColumn];
-
-                // Handle missing values
-                if (valA === undefined || valA === null || valA === '-') valA = -999;
-                if (valB === undefined || valB === null || valB === '-') valB = -999;
-
-                // Parse numerical values vs string
-                const numA = parseFloat(valA);
-                const numB = parseFloat(valB);
-
-                if (!isNaN(numA) && !isNaN(numB)) {
-                    valA = numA;
-                    valB = numB;
-                }
-
-                if (valA < valB) return currentSortDirection === 'asc' ? -1 : 1;
-                if (valA > valB) return currentSortDirection === 'asc' ? 1 : -1;
-                return 0;
-            });
-        }
-
-        // Render Table Rows
-        function renderTableBody() {
-            const tbody = document.getElementById('tableBody');
-            document.getElementById('rowCount').innerText = filteredData.length;
-
-            if (filteredData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="${COLUMNS.length}" class="text-center py-8 text-slate-500 italic">Ei pelaajia hakuehdoilla</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = filteredData.map((row, idx) => {
-                const bgClass = idx % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-950/40';
-                return `
-                    <tr class="${bgClass} hover:bg-red-950/30 transition-colors border-b border-slate-800/40">
-                        ${COLUMNS.map(col => {
-                            let val = row[col] !== undefined ? row[col] : '-';
-                            let classNames = "px-3 py-2 border-r border-slate-800/40";
-                            
-                            // Highlight key analytics sarakkeet
-                            if (col === 'Player') classNames += " font-semibold text-white sticky left-0 bg-slate-900 shadow-r";
-                            if (col === 'ixG' || col === 'Goals') classNames += " text-red-400 font-bold";
-                            if (col === 'Total Points') classNames += " text-yellow-400 font-bold";
-
-                            return `<td class="${classNames}">${val}</td>`;
-                        }).join('')}
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Setup SheetJS File Parsing for Excel / CSV
-        function setupFileUploadListeners() {
-            const fileInput = document.getElementById('excelFileInput');
-            fileInput.addEventListener('change', handleFileSelect);
-
-            const dropZone = document.getElementById('dropZone');
-            
-            window.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                dropZone.classList.remove('hidden');
-            });
-
-            dropZone.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                dropZone.classList.add('hidden');
-            });
-
-            dropZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                dropZone.classList.add('hidden');
-                if (e.dataTransfer.files.length > 0) {
-                    parseExcelFile(e.dataTransfer.files[0]);
-                }
-            });
-        }
-
-        function handleFileSelect(e) {
-            if (e.target.files.length > 0) {
-                parseExcelFile(e.target.files[0]);
-            }
-        }
-
-        function parseExcelFile(file) {
+        // Tiedoston lataus inputin kautta
+        document.getElementById('excelUpload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
             const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "-" });
-                    
-                    if (jsonData.length > 0) {
-                        currentRawData = jsonData;
-                        document.getElementById('dashboardTitle').innerText = file.name.replace(/\.[^/.]+$/, "") + " [-]";
-                        applyFilters();
-                        showToast(`Ladattu onnistuneesti ${jsonData.length} riviä tiedostosta: ${file.name}`);
-                    } else {
-                        alert("Tiedosto oli tyhjä tai sen rakennetta ei voitu lukea.");
-                    }
-                } catch (err) {
-                    console.error(err);
-                    alert("Virhe tiedoston luvussa! Varmista että tiedosto on validi Excel (.xlsx) tai CSV.");
-                }
+            reader.onload = (event) => {
+                processExcelData(event.target.result);
             };
             reader.readAsArrayBuffer(file);
+        });
+
+        function processExcelData(arrayBuffer) {
+            const data = new Uint8Array(arrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Muunnetaan JSON-muotoon
+            rawData = XLSX.utils.sheet_to_json(worksheet, { defval: "-" });
+            
+            populateGameFilter();
+            filterData();
         }
 
-        function resetToDemoData() {
-            currentRawData = [...DEMO_DATA["5v5"]];
-            document.getElementById('dashboardTitle').innerText = "Hurricanes - Individual [-]";
-            applyFilters();
-            showToast("Palautettu Hurricanes -demoaineisto.");
-        }
-
-        // Copy Table Content to Clipboard
-        function copyTableToClipboard() {
-            let text = COLUMNS.join('\t') + '\n';
-            filteredData.forEach(row => {
-                text += COLUMNS.map(c => row[c] !== undefined ? row[c] : '').join('\t') + '\n';
+        function populateGameFilter() {
+            const select = document.getElementById('gameFilter');
+            // Kerätään uniikit pelit (Game ID + Päivä + Vastustaja)
+            const games = {};
+            rawData.forEach(row => {
+                const gameId = row['Game ID'] || row['GameID'] || 'Tuntematon';
+                const date = row['Date'] || '';
+                const opponent = row['Opponent'] || '';
+                if (gameId !== 'Tuntematon') {
+                    games[gameId] = `Peli #${gameId} (${date} vs ${opponent})`;
+                }
             });
 
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
+            // Säilytetään "Kaikki pelit" ja lisätään pelit
+            select.innerHTML = '<option value="all">Kaikki pelit yhteensä (Kauden tilastot)</option>';
+            for (const [id, label] of Object.entries(games)) {
+                select.innerHTML += `<option value="${id}">${label}</option>`;
+            }
 
-            showToast("Taulukko kopioitu leikepöydälle (TSV format)!");
+            select.addEventListener('change', filterData);
+            document.getElementById('playerSearch').addEventListener('input', renderTable);
         }
 
-        // Export Data to CSV
-        function exportToCSV() {
-            const worksheet = XLSX.utils.json_to_sheet(filteredData, { header: COLUMNS });
-            const csvOutput = XLSX.utils.sheet_to_csv(worksheet);
+        function filterData() {
+            const selectedGame = document.getElementById('gameFilter').value;
             
-            const blob = new Blob([csvOutput], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.setAttribute('download', 'hockey_individual_stats.csv');
+            if (selectedGame === 'all') {
+                // Aggregoidaan pelaajittain kaikkien pelien yli
+                const aggregated = {};
+                rawData.forEach(row => {
+                    const player = row['Player'];
+                    if (!player || player === '-') return;
+
+                    if (!aggregated[player]) {
+                        aggregated[player] = { ...row };
+                        // Muunnetaan numeeriset kentät numeroiksi yhteenlaskua varten
+                        ['Goals', 'Assists', 'Points', 'Shots', 'Shots on goal', 'Hits', 'Penalty time', 'CORSI', 'CORSI+', 'CORSI-', 'Blocked shots'].forEach(col => {
+                            aggregated[player][col] = Number(row[col]) || 0;
+                        });
+                        ['xG (Expected goals)'].forEach(col => {
+                            aggregated[player][col] = Number(row[col]) || 0;
+                        });
+                    } else {
+                        // Summataan numerot yhteen
+                        ['Goals', 'Assists', 'Points', 'Shots', 'Shots on goal', 'Hits', 'Penalty time', 'CORSI', 'CORSI+', 'CORSI-', 'Blocked shots'].forEach(col => {
+                            aggregated[player][col] += Number(row[col]) || 0;
+                        });
+                        ['xG (Expected goals)'].forEach(col => {
+                            aggregated[player][col] += Number(row[col]) || 0;
+                        });
+                    }
+                });
+                currentFilteredData = Object.values(aggregated);
+                document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä";
+            } else {
+                // Suodatetaan tietty peli
+                currentFilteredData = rawData.filter(row => String(row['Game ID']) === String(selectedGame));
+                document.getElementById('tableTitle').innerText = `Pelaajatilastot - Peli #${selectedGame}`;
+            }
+
+            renderTable();
+            renderCharts();
+        }
+
+        function renderTable() {
+            if (currentFilteredData.length === 0) return;
+
+            const searchTerm = document.getElementById('playerSearch').value.toLowerCase();
+            const filtered = currentFilteredData.filter(row => {
+                const name = String(row['Player'] || '').toLowerCase();
+                const pos = String(row['Position'] || '').toLowerCase();
+                return name.includes(searchTerm) || pos.includes(searchTerm);
+            });
+
+            const headers = Object.keys(currentFilteredData[0]);
+            
+            // Renderöidään otsikot
+            const headerTr = document.getElementById('tableHeader');
+            headerTr.innerHTML = headers.map(h => `<th class="px-3 py-2 cursor-pointer hover:text-white">${h}</th>`).join('');
+
+            // Renderöidään rivit
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = filtered.map(row => {
+                return `<tr class="hover:bg-slate-800/50 transition">` + 
+                    headers.map(h => `<td class="px-3 py-2 text-slate-300">${row[h] !== undefined ? row[h] : '-'}</td>`).join('') +
+                    `</tr>`;
+            }).join('');
+        }
+
+        function renderCharts() {
+            if (currentFilteredData.length === 0) return;
+
+            // Otetaan top 10 pelaajaa maalien mukaan kaavioita varten
+            const sortedByGoals = [...currentFilteredData].sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0)).slice(0, 10);
+            
+            const labels = sortedByGoals.map(d => d['Player']);
+            const goals = sortedByGoals.map(d => Number(d['Goals']) || 0);
+            const xgs = sortedByGoals.map(d => Number(d['xG (Expected goals)'] || d['xG']) || 0);
+            const corsi = sortedByGoals.map(d => Number(d['CORSI']) || 0);
+
+            // xG Chart
+            const ctxXg = document.getElementById('xgChart').getContext('2d');
+            if (xgChartInstance) xgChartInstance.destroy();
+            xgChartInstance = new Chart(ctxXg, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Maalit', data: goals, backgroundColor: '#ef4444' },
+                        { label: 'xG (Odotetut maalit)', data: xgs, backgroundColor: '#3b82f6' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
+            });
+
+            // Corsi Chart
+            const ctxCorsi = document.getElementById('corsiChart').getContext('2d');
+            if (corsiChartInstance) corsiChartInstance.destroy();
+            corsiChartInstance = new Chart(ctxCorsi, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'CORSI', data: corsi, backgroundColor: '#10b981' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
+            });
+        }
+
+        function copyTable() {
+            const table = document.getElementById('statsTable');
+            let text = "";
+            for (let row of table.rows) {
+                let rowText = [];
+                for (let cell of row.cells) {
+                    rowText.push(cell.innerText);
+                }
+                text += rowText.join("\t") + "\n";
+            }
+            navigator.clipboard.writeText(text);
+            alert("Taulukko kopioitu leikepöydälle! Voit liittää sen suoraan Exceliin.");
+        }
+
+        function exportCSV() {
+            if (currentFilteredData.length === 0) return;
+            const headers = Object.keys(currentFilteredData[0]);
+            let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
+            currentFilteredData.forEach(row => {
+                csvContent += headers.map(h => `"${row[h] !== undefined ? row[h] : ''}"`).join(",") + "\n";
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "sdhl_tilastot_vientityakalu.csv");
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
-            showToast("CSV-tiedosto ladattu!");
-        }
-
-        function showToast(msg) {
-            const toast = document.getElementById('toastMessage');
-            toast.innerText = msg;
-            toast.classList.remove('hidden');
-            setTimeout(() => {
-                toast.classList.add('hidden');
-            }, 3500);
-        }
-
-        // Chart.js Visualizations Setup
-        function initCharts() {
-            // Chart 1: ixG vs Goals
-            const ctx1 = document.getElementById('xgChart').getContext('2d');
-            xgChartInstance = new Chart(ctx1, {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [
-                        { label: 'ixG (Expected Goals)', data: [], backgroundColor: 'rgba(220, 38, 38, 0.7)', borderColor: '#dc2626', borderWidth: 1 },
-                        { label: 'Goals', data: [], backgroundColor: 'rgba(245, 158, 11, 0.8)', borderColor: '#f59e0b', borderWidth: 1 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'monospace', size: 10 } } } },
-                    scales: {
-                        x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { color: '#1e293b' } },
-                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } }
-                    }
-                }
-            });
-
-            // Chart 2: Corsi & HDCF
-            const ctx2 = document.getElementById('corsiChart').getContext('2d');
-            corsiChartInstance = new Chart(ctx2, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [
-                        { label: 'iCF (Individual Corsi For)', data: [], borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)', fill: true, tension: 0.3 },
-                        { label: 'iHDCF (High-Danger)', data: [], borderColor: '#ec4899', backgroundColor: 'transparent', borderDash: [4, 4] }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'monospace', size: 10 } } } },
-                    scales: {
-                        x: { ticks: { color: '#94a3b8', font: { size: 9 } }, grid: { color: '#1e293b' } },
-                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } }
-                    }
-                }
-            });
-
-            // Chart 3: Timeline Simulation
-            const ctx3 = document.getElementById('timelineChart').getContext('2d');
-            timelineChartInstance = new Chart(ctx3, {
-                type: 'line',
-                data: {
-                    labels: ['0\'', '10\'', '20\' (Erä 1)', '30\'', '40\' (Erä 2)', '50\'', '60\' (Erä 3)'],
-                    datasets: [
-                        { label: 'Hurricanes Kumulatiivinen xG', data: [0, 0.4, 0.9, 1.2, 1.8, 2.3, 2.65], borderColor: '#cc0000', backgroundColor: 'rgba(204,0,0,0.2)', fill: true },
-                        { label: 'Vastustaja Kumulatiivinen xG', data: [0, 0.2, 0.5, 0.7, 0.9, 1.1, 1.3], borderColor: '#64748b', backgroundColor: 'transparent', borderDash: [5, 5] }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'monospace', size: 10 } } } },
-                    scales: {
-                        x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
-                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } }
-                    }
-                }
-            });
-        }
-
-        // Dynamically update charts based on active table data
-        function updateCharts() {
-            if (!xgChartInstance || !corsiChartInstance) return;
-
-            const topPlayers = filteredData.slice(0, 10); // Show top 10 for clarity
-            const labels = topPlayers.map(p => p.Player ? p.Player.split(' ').pop() : 'N/A');
-            const ixgData = topPlayers.map(p => parseFloat(p.ixG) || 0);
-            const goalsData = topPlayers.map(p => parseInt(p.Goals) || 0);
-            const icfData = topPlayers.map(p => parseInt(p.iCF) || 0);
-            const ihdcfData = topPlayers.map(p => parseInt(p.iHDCF) || 0);
-
-            // Update Chart 1
-            xgChartInstance.data.labels = labels;
-            xgChartInstance.data.datasets[0].data = ixgData;
-            xgChartInstance.data.datasets[1].data = goalsData;
-            xgChartInstance.update();
-
-            // Update Chart 2
-            corsiChartInstance.data.labels = labels;
-            corsiChartInstance.data.datasets[0].data = icfData;
-            corsiChartInstance.data.datasets[1].data = ihdcfData;
-            corsiChartInstance.update();
         }
     </script>
 </body>
