@@ -18,20 +18,19 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
 
-    <!-- Yläpalkki (Natural Stat Trick -tyyli) -->
+    <!-- Yläpalkki -->
     <header class="bg-red-950 border-b border-red-900 shadow-lg">
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
             <div>
                 <h1 class="text-xl font-black tracking-wider text-white uppercase">SDHL Game Stats</h1>
-                <p class="text-xs text-red-300">Ottelutilastot ja kehittyneet tilastot</p>
+                <p class="text-xs text-red-300">Ottelutilastot ja kehittyneet tilastot (Klikkaa pelaajaa nähdäksesi pelikohtaiset tiedot)</p>
             </div>
             
-            <!-- Suodattimet ja tiedoston tuonti -->
             <div class="flex flex-wrap items-center gap-3">
                 <div>
                     <label class="block text-[10px] text-red-200 uppercase font-bold">Valitse näkymä / peli</label>
                     <select id="gameFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
-                        <option value="all">Kaikki pelit yhteensä (Kaustilastot)</option>
+                        <option value="all">Kaikki pelit yhteensä (Kauden tilastot)</option>
                     </select>
                 </div>
 
@@ -57,20 +56,15 @@
                 </div>
             </div>
 
-            <!-- Taulukko -->
             <div class="overflow-x-auto custom-scrollbar max-h-[600px]">
                 <table id="statsTable" class="w-full text-left border-collapse text-xs whitespace-nowrap">
-                    <thead id="tableHeader" class="bg-slate-950 text-slate-400 uppercase text-[10px] sticky top-0 z-10 border-b border-slate-800">
-                        <!-- Luodaan dynaamisesti -->
-                    </thead>
-                    <tbody id="tableBody" class="divide-y divide-slate-800/60">
-                        <!-- Datan lataus -->
-                    </tbody>
+                    <thead id="tableHeader" class="bg-slate-950 text-slate-400 uppercase text-[10px] sticky top-0 z-10 border-b border-slate-800"></thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-800/60"></tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Kaaviot / Visualisoinnit -->
+        <!-- Kaaviot -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
                 <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalit vs Odotetut maalit (xG)</h3>
@@ -88,35 +82,65 @@
 
     </main>
 
+    <!-- Pelaajan pelikohtainen modaali (Ponnahdusikkuna) -->
+    <div id="playerModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="bg-slate-950 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+                <div>
+                    <h3 id="modalPlayerName" class="text-lg font-bold text-white">Pelaajan tiedot</h3>
+                    <p class="text-xs text-red-400">Ottelukohtaiset tilastot kauden aikana</p>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 py-1">&times;</button>
+            </div>
+            <div class="p-4 overflow-x-auto custom-scrollbar flex-1">
+                <table class="w-full text-left border-collapse text-xs whitespace-nowrap">
+                    <thead id="modalTableHeader" class="bg-slate-950 text-slate-400 uppercase text-[10px] sticky top-0"></thead>
+                    <tbody id="modalTableBody" class="divide-y divide-slate-800/60"></tbody>
+                </table>
+            </div>
+            <div class="bg-slate-950 px-6 py-3 border-t border-slate-800 text-right">
+                <button onclick="closeModal()" class="bg-red-900 hover:bg-red-800 text-white text-xs px-4 py-2 rounded transition">Sulje</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let rawData = [];
         let currentFilteredData = [];
         let xgChartInstance = null;
         let corsiChartInstance = null;
 
-        // Ladataan automaattisesti sama Excel jos se on samassa kansiossa, tai näytetään tyhjä
+        // Apufunktio Excelin päivämäärän korjaukseen (Excel serial date -> YYYY-MM-DD)
+        function formatExcelDate(serial) {
+            if (!serial) return '-';
+            if (typeof serial === 'string' && serial.includes('-')) return serial;
+            const utc_days = Math.floor(serial - 25569);
+            const utc_value = utc_days * 86400;
+            const date_info = new Date(utc_value * 1000);
+            if (isNaN(date_info.getTime())) return serial;
+            const year = date_info.getUTCFullYear();
+            const month = String(date_info.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(date_info.getUTCDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
         window.addEventListener('DOMContentLoaded', async () => {
             try {
                 const response = await fetch('Sdhl Game score 2026-2027.xlsx');
                 if (response.ok) {
                     const arrayBuffer = await response.arrayBuffer();
                     processExcelData(arrayBuffer);
-                } else {
-                    console.log('Exceliä ei löytynyt suoraan polusta, odotetaan tiedoston latausta.');
                 }
             } catch (e) {
-                console.log('Automaattinen lataus epäonnistui, voit ladata tiedoston manuaalisesti.');
+                console.log('Lataa Excel manuaalisesti.');
             }
         });
 
-        // Tiedoston lataus inputin kautta
         document.getElementById('excelUpload').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (event) => {
-                processExcelData(event.target.result);
-            };
+            reader.onload = (event) => { processExcelData(event.target.result); };
             reader.readAsArrayBuffer(file);
         });
 
@@ -126,8 +150,14 @@
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
             
-            // Muunnetaan JSON-muotoon
             rawData = XLSX.utils.sheet_to_json(worksheet, { defval: "-" });
+            
+            // Korjataan päivämäärät kaikille riveille
+            rawData.forEach(row => {
+                if (row['Date']) {
+                    row['Date'] = formatExcelDate(row['Date']);
+                }
+            });
             
             populateGameFilter();
             filterData();
@@ -135,7 +165,6 @@
 
         function populateGameFilter() {
             const select = document.getElementById('gameFilter');
-            // Kerätään uniikit pelit (Game ID + Päivä + Vastustaja)
             const games = {};
             rawData.forEach(row => {
                 const gameId = row['Game ID'] || row['GameID'] || 'Tuntematon';
@@ -146,7 +175,6 @@
                 }
             });
 
-            // Säilytetään "Kaikki pelit" ja lisätään pelit
             select.innerHTML = '<option value="all">Kaikki pelit yhteensä (Kauden tilastot)</option>';
             for (const [id, label] of Object.entries(games)) {
                 select.innerHTML += `<option value="${id}">${label}</option>`;
@@ -160,7 +188,6 @@
             const selectedGame = document.getElementById('gameFilter').value;
             
             if (selectedGame === 'all') {
-                // Aggregoidaan pelaajittain kaikkien pelien yli
                 const aggregated = {};
                 rawData.forEach(row => {
                     const player = row['Player'];
@@ -168,7 +195,6 @@
 
                     if (!aggregated[player]) {
                         aggregated[player] = { ...row };
-                        // Muunnetaan numeeriset kentät numeroiksi yhteenlaskua varten
                         ['Goals', 'Assists', 'Points', 'Shots', 'Shots on goal', 'Hits', 'Penalty time', 'CORSI', 'CORSI+', 'CORSI-', 'Blocked shots'].forEach(col => {
                             aggregated[player][col] = Number(row[col]) || 0;
                         });
@@ -176,7 +202,6 @@
                             aggregated[player][col] = Number(row[col]) || 0;
                         });
                     } else {
-                        // Summataan numerot yhteen
                         ['Goals', 'Assists', 'Points', 'Shots', 'Shots on goal', 'Hits', 'Penalty time', 'CORSI', 'CORSI+', 'CORSI-', 'Blocked shots'].forEach(col => {
                             aggregated[player][col] += Number(row[col]) || 0;
                         });
@@ -186,9 +211,8 @@
                     }
                 });
                 currentFilteredData = Object.values(aggregated);
-                document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä";
+                document.getElementById('tableTitle').innerText = "Pelaajatilastot - Koko kausi yhteensä (Klikkaa pelaajaa nähdäksesi pelit)";
             } else {
-                // Suodatetaan tietty peli
                 currentFilteredData = rawData.filter(row => String(row['Game ID']) === String(selectedGame));
                 document.getElementById('tableTitle').innerText = `Pelaajatilastot - Peli #${selectedGame}`;
             }
@@ -209,23 +233,52 @@
 
             const headers = Object.keys(currentFilteredData[0]);
             
-            // Renderöidään otsikot
             const headerTr = document.getElementById('tableHeader');
-            headerTr.innerHTML = headers.map(h => `<th class="px-3 py-2 cursor-pointer hover:text-white">${h}</th>`).join('');
+            headerTr.innerHTML = headers.map(h => `<th class="px-3 py-2">${h}</th>`).join('');
 
-            // Renderöidään rivit
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = filtered.map(row => {
+                const playerName = row['Player'];
+                return `<tr class="hover:bg-slate-800/50 transition">` + 
+                    headers.map(h => {
+                        let val = row[h] !== undefined ? row[h] : '-';
+                        if (h === 'Player') {
+                            return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline" onclick="openPlayerModal('${playerName}')">${val}</td>`;
+                        }
+                        return `<td class="px-3 py-2 text-slate-300">${val}</td>`;
+                    }).join('') +
+                    `</tr>`;
+            }).join('');
+        }
+
+        // Avaa pelaajan omat pelikohtaiset tilastot
+        function openPlayerModal(playerName) {
+            document.getElementById('modalPlayerName').innerText = `Pelaaja: ${playerName}`;
+            const playerGames = rawData.filter(row => row['Player'] === playerName);
+
+            if (playerGames.length === 0) return;
+
+            const headers = Object.keys(playerGames[0]);
+            const headerTr = document.getElementById('modalTableHeader');
+            headerTr.innerHTML = headers.map(h => `<th class="px-3 py-2">${h}</th>`).join('');
+
+            const tbody = document.getElementById('modalTableBody');
+            tbody.innerHTML = playerGames.map(row => {
                 return `<tr class="hover:bg-slate-800/50 transition">` + 
                     headers.map(h => `<td class="px-3 py-2 text-slate-300">${row[h] !== undefined ? row[h] : '-'}</td>`).join('') +
                     `</tr>`;
             }).join('');
+
+            document.getElementById('playerModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('playerModal').classList.add('hidden');
         }
 
         function renderCharts() {
             if (currentFilteredData.length === 0) return;
 
-            // Otetaan top 10 pelaajaa maalien mukaan kaavioita varten
             const sortedByGoals = [...currentFilteredData].sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0)).slice(0, 10);
             
             const labels = sortedByGoals.map(d => d['Player']);
@@ -233,7 +286,6 @@
             const xgs = sortedByGoals.map(d => Number(d['xG (Expected goals)'] || d['xG']) || 0);
             const corsi = sortedByGoals.map(d => Number(d['CORSI']) || 0);
 
-            // xG Chart
             const ctxXg = document.getElementById('xgChart').getContext('2d');
             if (xgChartInstance) xgChartInstance.destroy();
             xgChartInstance = new Chart(ctxXg, {
@@ -248,7 +300,6 @@
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } } }
             });
 
-            // Corsi Chart
             const ctxCorsi = document.getElementById('corsiChart').getContext('2d');
             if (corsiChartInstance) corsiChartInstance.destroy();
             corsiChartInstance = new Chart(ctxCorsi, {
@@ -268,13 +319,11 @@
             let text = "";
             for (let row of table.rows) {
                 let rowText = [];
-                for (let cell of row.cells) {
-                    rowText.push(cell.innerText);
-                }
+                for (let cell of row.cells) { rowText.push(cell.innerText); }
                 text += rowText.join("\t") + "\n";
             }
             navigator.clipboard.writeText(text);
-            alert("Taulukko kopioitu leikepöydälle! Voit liittää sen suoraan Exceliin.");
+            alert("Taulukko kopioitu leikepöydälle!");
         }
 
         function exportCSV() {
@@ -287,7 +336,7 @@
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "sdhl_tilastot_vientityakalu.csv");
+            link.setAttribute("download", "sdhl_tilastot.csv");
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
