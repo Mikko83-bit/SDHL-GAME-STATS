@@ -188,7 +188,8 @@
             const ordered = {};
             const keys = Object.keys(row);
 
-            ['Team', 'Shirt number', 'Player', 'Position', 'Time on ice', 'All shifts', 'Game Score', 'Game Score / 60'].forEach(k => {
+            // Asetetaan haluttu järjestys alkuun (Team, Shirt number, Player, Position, Games, Game Score, Game Score / 60)
+            ['Team', 'Shirt number', 'Player', 'Position', 'Games', 'Time on ice', 'All shifts', 'Game Score', 'Game Score / 60'].forEach(k => {
                 if (row[k] !== undefined) ordered[k] = row[k];
             });
 
@@ -233,6 +234,9 @@
                 if (row['Date']) {
                     row['Date'] = formatExcelDate(row['Date']);
                 }
+                // Yksittäisessä pelissä Games on aina 1 (jos pelaaja on pelannut)
+                row['Games'] = 1;
+
                 const gs = calculateGameScore(row);
                 row['Game Score'] = Number(gs.toFixed(2));
                 
@@ -315,12 +319,12 @@
                         delete aggregated[player]['Opponent'];
                         delete aggregated[player]['Game ID'];
 
-                        counts[player] = 1;
+                        counts[player] = 1; // Laskee pelatut ottelut
                         toiSeconds[player] = timeToSecs(row['Time on ice']);
                         totalGs[player] = row['Game Score'] || 0;
 
                         Object.keys(row).forEach(key => {
-                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Game Score / 60'].includes(key)) {
+                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Games', 'Game Score / 60'].includes(key)) {
                                 if (key === 'Time on ice') {
                                     aggregated[player][key] = toiSeconds[player];
                                 } else if (key.includes('%')) {
@@ -338,7 +342,7 @@
                         totalGs[player] += row['Game Score'] || 0;
 
                         Object.keys(row).forEach(key => {
-                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Game Score / 60'].includes(key)) {
+                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Games', 'Game Score / 60'].includes(key)) {
                                 if (key === 'Time on ice') {
                                     aggregated[player][key] = toiSeconds[player];
                                 } else if (key.includes('%')) {
@@ -361,6 +365,8 @@
                     const c = counts[player] || 1;
                     const totalSecs = toiSeconds[player] || 0;
                     const gsSum = totalGs[player] || 0;
+
+                    aggregated[player]['Games'] = c;
 
                     Object.keys(aggregated[player]).forEach(key => {
                         if (key === 'Time on ice') {
@@ -408,7 +414,7 @@
                 isAscending = !isAscending;
             } else {
                 currentSortColumn = column;
-                isAscending = false; // Oletuksena isoin ensin (laskeva)
+                isAscending = false;
             }
 
             currentFilteredData.sort((a, b) => {
