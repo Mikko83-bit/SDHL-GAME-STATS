@@ -86,7 +86,7 @@
             </div>
         </div>
 
-        <!-- Charts / Comparisons (Näkyy vain Pelaajatilastot-välilehdellä) -->
+        <!-- Charts / Comparisons (Player Stats) -->
         <div id="chartsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
                 <h3 id="chart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals vs Expected Goals (xG)</h3>
@@ -104,6 +104,22 @@
                 <h3 id="chart3Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Top Game Score / 60</h3>
                 <div class="relative h-72">
                     <canvas id="chart3"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Team Charts Container (Näkyy vain Team Stats -välilehdellä) -->
+        <div id="teamChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6" style="display: none;">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Goals vs Expected Goals (xG)</h3>
+                <div class="relative h-80">
+                    <canvas id="teamChart1"></canvas>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Net xG (xG - Opponent's xG)</h3>
+                <div class="relative h-80">
+                    <canvas id="teamChart2"></canvas>
                 </div>
             </div>
         </div>
@@ -145,6 +161,8 @@
         let chart1Instance = null;
         let chart2Instance = null;
         let chart3Instance = null;
+        let teamChart1Instance = null;
+        let teamChart2Instance = null;
 
         function formatExcelDate(serial) {
             if (!serial) return '-';
@@ -237,7 +255,6 @@
             const data = new Uint8Array(arrayBuffer);
             const workbook = XLSX.read(data, { type: 'array' });
             
-            // 1. SDHL Game Score (Players)
             if (workbook.Sheets['SDHL GAME SCORE']) {
                 let tempRaw = XLSX.utils.sheet_to_json(workbook.Sheets['SDHL GAME SCORE'], { defval: "-" });
                 workbookData.playersRaw = tempRaw.map(row => {
@@ -252,12 +269,10 @@
                 });
             }
 
-            // 2. Faceoffs
             if (workbook.Sheets['Faceoffs']) {
                 workbookData.faceoffsRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Faceoffs'], { defval: "-" });
             }
 
-            // 3. Teams SDHL
             if (workbook.Sheets['Teams SDHL']) {
                 workbookData.teamsRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Teams SDHL'], { defval: "-" });
             }
@@ -270,15 +285,14 @@
         function switchTab(tabName) {
             currentTab = tabName;
             
-            // Päivitä nappien tyylit
             document.getElementById('tabPlayers').className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition ${tabName === 'players' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
             document.getElementById('tabFaceoffs').className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition ${tabName === 'faceoffs' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
             document.getElementById('tabTeams').className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition ${tabName === 'teams' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
 
-            // Näytä/piilota suodattimet ja kaaviot tarpeen mukaan
             document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
             document.getElementById('teamFilterContainer').style.display = (tabName === 'teams') ? 'none' : 'block';
             document.getElementById('chartsContainer').style.display = (tabName === 'players') ? 'grid' : 'none';
+            document.getElementById('teamChartsContainer').style.display = (tabName === 'teams') ? 'grid' : 'none';
 
             currentSortColumn = null;
             renderCurrentView();
@@ -299,9 +313,9 @@
                 renderTable();
             } else if (currentTab === 'teams') {
                 document.getElementById('tableTitle').innerText = "Teams SDHL Statistics";
-                let data = [...workbookData.teamsRaw];
-                currentFilteredData = data;
+                currentFilteredData = [...workbookData.teamsRaw];
                 renderTable();
+                renderTeamCharts();
             }
         }
 
@@ -510,11 +524,7 @@
             const headerTr = document.getElementById('tableHeader');
             headerTr.innerHTML = headers.map((h, index) => {
                 let stickyClass = '';
-                if (currentTab === 'players') {
-                    if (h === 'Team') stickyClass = 'sticky-col-team';
-                    else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
-                    else if (h === 'Player') stickyClass = 'sticky-col-player';
-                } else if (currentTab === 'faceoffs') {
+                if (currentTab === 'players' || currentTab === 'faceoffs') {
                     if (h === 'Team') stickyClass = 'sticky-col-team';
                     else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
                     else if (h === 'Player') stickyClass = 'sticky-col-player';
@@ -736,6 +746,77 @@
                     }
                 });
             }
+        }
+
+        function renderTeamCharts() {
+            if (teamChart1Instance) teamChart1Instance.destroy();
+            if (teamChart2Instance) teamChart2Instance.destroy();
+
+            const teamsData = [...workbookData.teamsRaw];
+            // Järjestetään tehtyjen maalien mukaan
+            teamsData.sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0));
+
+            const labels = teamsData.map(d => d['Team']);
+            const goals = teamsData.map(d => Number(d['Goals']) || 0);
+            
+            // Etsitään oikea xG-sarake
+            const xgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('xgn') || k.toLowerCase().includes('expected goals')) || 'xG (Expected goals)';
+            const xg = teamsData.map(d => Number(Number(d[xgKey] || 0).toFixed(2)));
+
+            // Etsitään Net xG -sarake
+            const netXgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('net xg')) || "Net xG (xG - Opponent's xG)";
+            const netXg = teamsData.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
+
+            teamChart1Instance = new Chart(document.getElementById('teamChart1').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Goals', data: goals, backgroundColor: '#ef4444' },
+                        { label: 'Expected Goals (xG)', data: xg, backgroundColor: '#3b82f6' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 11 } } },
+                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 10, weight: 'bold' } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 10 } } },
+                        y: { ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+
+            // Järjestetään Net xG mukaan toiseen kaavioon
+            const sortedByNetXg = [...teamsData].sort((a, b) => (Number(b[netXgKey]) || 0) - (Number(a[netXgKey]) || 0));
+            const netLabels = sortedByNetXg.map(d => d['Team']);
+            const netValues = sortedByNetXg.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
+            const bgColors = netValues.map(v => v >= 0 ? '#10b981' : '#ef4444');
+
+            teamChart2Instance = new Chart(document.getElementById('teamChart2').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: netLabels,
+                    datasets: [
+                        { label: 'Net xG', data: netValues, backgroundColor: bgColors }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 11 } } },
+                        datalabels: { anchor: 'end', align: function(context) { return context.dataset.data[context.dataIndex] < 0 ? 'bottom' : 'top'; }, color: '#cbd5e1', font: { size: 10, weight: 'bold' } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 10 } } },
+                        y: { ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
         }
 
         function copyTable() {
