@@ -70,17 +70,35 @@
     <!-- Main Content -->
     <main class="max-w-[98%] mx-auto px-2 py-6">
 
+        <!-- Erikoissuodattimet Scoring Chances -välilehdelle -->
+        <div id="chancesFiltersBar" style="display: none;" class="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-4 shadow-xl grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+            <div>
+                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Valitse näkymä / Alapaneeli</label>
+                <div class="flex gap-1 bg-slate-950 p-1 rounded border border-slate-800">
+                    <button onclick="switchChancesSub('players')" id="subBtnPlayers" class="flex-1 px-3 py-1 text-[11px] font-bold uppercase rounded bg-red-900 text-white transition">Pelaajat</button>
+                    <button onclick="switchChancesSub('team')" id="subBtnTeam" class="flex-1 px-3 py-1 text-[11px] font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition">Pelitavat</button>
+                </div>
+            </div>
+
+            <div id="playerMultiSelectContainer">
+                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Pelaajat (Monivalinta)</label>
+                <select id="filterPlayersMulti" multiple class="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-1.5 h-20 focus:outline-none custom-scrollbar">
+                </select>
+                <p class="text-[9px] text-slate-400 mt-0.5">Pidä Ctrl / Cmd pohjassa valitaksesi useita.</p>
+            </div>
+
+            <div id="descriptorMultiSelectContainer">
+                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Tilanteet / Pelitavat (Monivalinta)</label>
+                <select id="filterDescriptorsMulti" multiple class="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-1.5 h-20 focus:outline-none custom-scrollbar">
+                </select>
+                <p class="text-[9px] text-slate-400 mt-0.5">Pidä Ctrl / Cmd pohjassa valitaksesi useita.</p>
+            </div>
+        </div>
+
         <!-- Standard Table Container -->
         <div id="tableSection" class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden mb-8">
             <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
-                <div class="flex items-center gap-4">
-                    <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Player Statistics (All Games Total)</h2>
-                    <!-- Alavalikko Scoring Chances sisällä (Pelaajat vs Pelitavat) -->
-                    <div id="chancesSubMenu" style="display: none;" class="flex gap-1 bg-slate-950 p-1 rounded border border-slate-800">
-                        <button onclick="switchChancesSub('players')" id="subBtnPlayers" class="px-3 py-1 text-[11px] font-bold uppercase rounded bg-red-900 text-white transition">Pelaajat</button>
-                        <button onclick="switchChancesSub('team')" id="subBtnTeam" class="px-3 py-1 text-[11px] font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition">Pelitavat (Team)</button>
-                    </div>
-                </div>
+                <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Player Statistics (All Games Total)</h2>
                 <div class="flex gap-2">
                     <input type="text" id="playerSearch" placeholder="Search..." class="bg-slate-950 border border-slate-700 text-xs text-white rounded px-3 py-1 focus:outline-none focus:border-red-500">
                     <button onclick="copyTable()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">Copy</button>
@@ -197,7 +215,7 @@
             </div>
         </div>
 
-        <!-- Scoring Chances Charts Container (For vs Against vierekkäin) -->
+        <!-- Scoring Chances Charts Container -->
         <div id="chancesChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
                 <h3 id="chanceChart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalipaikat: For vs Against</h3>
@@ -249,7 +267,7 @@
             chancesTeamRaw: []
         };
         let currentTab = 'players';
-        let chancesSub = 'players'; // 'players' tai 'team'
+        let chancesSub = 'players';
         let currentFilteredData = [];
         let currentSortColumn = null;
         let isAscending = false;
@@ -424,6 +442,7 @@
             populateTeamFilter();
             buildAggregatedPlayers();
             setupCompareFilters();
+            buildChancesPlayersMap();
             switchTab(currentTab);
         }
 
@@ -433,11 +452,12 @@
 
             if (workbook.Sheets['Players']) {
                 workbookData.chancesPlayersRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Players'], { defval: 0 });
-                buildAggregatedChancesPlayers();
+                buildChancesPlayersMap();
             }
 
             if (workbook.Sheets['Team']) {
                 workbookData.chancesTeamRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Team'], { defval: 0 });
+                populateDescriptorsFilter();
             }
 
             if (currentTab === 'chances') {
@@ -528,20 +548,24 @@
             workbookData.playersAggregated = Object.values(aggregated);
         }
 
-        function buildAggregatedChancesPlayers() {
+        function buildChancesPlayersMap() {
+            if (workbookData.chancesPlayersRaw.length === 0) return;
+
+            // Luodaan kartta pelinumerosta Luleån pelaajaan
+            const numToPlayer = {};
+            workbookData.playersRaw.filter(p => p['Team'] === 'Lulea').forEach(p => {
+                numToPlayer[String(p['Shirt number']).trim()] = p['Player'];
+            });
+
             const aggregated = {};
             workbookData.chancesPlayersRaw.forEach(row => {
-                const num = row['Number'];
-                if (!num) return;
+                const num = String(row['Number']).trim();
+                if (!num || num === '0') return;
 
-                if (!aggregated[num]) {
-                    // Yritetään etsiä pelaajan nimi päädatasta pelinumeron perusteella
-                    const foundPlayer = workbookData.playersRaw.find(p => String(p['Shirt number']) === String(num));
-                    const playerName = foundPlayer ? foundPlayer['Player'] : `Pelaaja #${num}`;
-                    const playerTeam = foundPlayer ? foundPlayer['Team'] : '-';
+                const playerName = numToPlayer[num] || `Pelaaja #${num}`;
 
-                    aggregated[num] = {
-                        'Team': playerTeam,
+                if (!aggregated[playerName]) {
+                    aggregated[playerName] = {
                         'Shirt number': num,
                         'Player': playerName,
                         'Goal For': 0,
@@ -552,14 +576,36 @@
                         'Chance Against': 0
                     };
                 }
-                aggregated[num]['Goal For'] += Number(row['Goal For']) || 0;
-                aggregated[num]['Chance For'] += Number(row['Chance For']) || 0;
-                aggregated[num]['PP Goal'] += Number(row['PP goal']) || 0;
-                aggregated[num]['PP Chance'] += Number(row['PP chance']) || 0;
-                aggregated[num]['Goal Against'] += Number(row['Goal Against']) || 0;
-                aggregated[num]['Chance Against'] += Number(row['Chance Against']) || 0;
+                aggregated[playerName]['Goal For'] += Number(row['Goal For']) || 0;
+                aggregated[playerName]['Chance For'] += Number(row['Chance For']) || 0;
+                aggregated[playerName]['PP Goal'] += Number(row['PP goal']) || 0;
+                aggregated[playerName]['PP Chance'] += Number(row['PP chance']) || 0;
+                aggregated[playerName]['Goal Against'] += Number(row['Goal Against']) || 0;
+                aggregated[playerName]['Chance Against'] += Number(row['Chance Against']) || 0;
             });
+
             workbookData.chancesPlayersAggregated = Object.values(aggregated);
+            populatePlayersFilter();
+        }
+
+        function populatePlayersFilter() {
+            const select = document.getElementById('filterPlayersMulti');
+            const players = workbookData.chancesPlayersAggregated.map(p => p['Player']).sort();
+            select.innerHTML = players.map(p => `<option value="${p}">${p}</option>`).join('');
+            select.removeEventListener('change', renderCurrentView);
+            select.addEventListener('change', renderCurrentView);
+        }
+
+        function populateDescriptorsFilter() {
+            const select = document.getElementById('filterDescriptorsMulti');
+            const descSet = new Set();
+            workbookData.chancesTeamRaw.forEach(r => {
+                if (r['Descriptor']) descSet.add(r['Descriptor']);
+            });
+            const descriptors = Array.from(descSet).sort();
+            select.innerHTML = descriptors.map(d => `<option value="${d}">${d}</option>`).join('');
+            select.removeEventListener('change', renderCurrentView);
+            select.addEventListener('change', renderCurrentView);
         }
 
         function setupCompareFilters() {
@@ -620,7 +666,7 @@
 
             document.getElementById('tableSection').style.display = (tabName === 'compare') ? 'none' : 'block';
             document.getElementById('comparisonSection').style.display = (tabName === 'compare') ? 'block' : 'none';
-            document.getElementById('chancesSubMenu').style.display = (tabName === 'chances') ? 'flex' : 'none';
+            document.getElementById('chancesFiltersBar').style.display = (tabName === 'chances') ? 'grid' : 'none';
 
             document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
             document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare' || tabName === 'chances') ? 'none' : 'block';
@@ -635,8 +681,13 @@
 
         function switchChancesSub(sub) {
             chancesSub = sub;
-            document.getElementById('subBtnPlayers').className = `px-3 py-1 text-[11px] font-bold uppercase rounded transition ${sub === 'players' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
-            document.getElementById('subBtnTeam').className = `px-3 py-1 text-[11px] font-bold uppercase rounded transition ${sub === 'team' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+            document.getElementById('subBtnPlayers').className = `flex-1 px-3 py-1 text-[11px] font-bold uppercase rounded transition ${sub === 'players' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+            document.getElementById('subBtnTeam').className = `flex-1 px-3 py-1 text-[11px] font-bold uppercase rounded transition ${sub === 'team' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+            
+            // Näytetään tai piilotetaan suodattimet alapaneelin mukaan
+            document.getElementById('playerMultiSelectContainer').style.display = (sub === 'players') ? 'block' : 'none';
+            document.getElementById('descriptorMultiSelectContainer').style.display = (sub === 'team') ? 'block' : 'none';
+
             renderCurrentView();
         }
 
@@ -670,14 +721,30 @@
                 renderTable();
             } else if (currentTab === 'chances') {
                 if (chancesSub === 'players') {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Pelaajien tilastot (For vs Against)";
-                    currentFilteredData = [...workbookData.chancesPlayersAggregated];
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Pelaajien tilastot (For vs Against)";
+                    
+                    // Kerätään valitut pelaajat monivalinnasta
+                    const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
+                    
+                    let data = [...workbookData.chancesPlayersAggregated];
+                    if (selectedPlayers.length > 0) {
+                        data = data.filter(d => selectedPlayers.includes(d['Player']));
+                    }
+                    currentFilteredData = data;
                     renderTable();
                     renderChancesPlayerCharts();
                 } else {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Pelitavat (Team Descriptors)";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Pelitavat / Tilanteet (Team Descriptors)";
+                    
+                    const selectedDescriptors = Array.from(document.getElementById('filterDescriptorsMulti').selectedOptions).map(opt => opt.value);
+
+                    let rawTeamData = workbookData.chancesTeamRaw;
+                    if (selectedDescriptors.length > 0) {
+                        rawTeamData = rawTeamData.filter(r => selectedDescriptors.includes(r['Descriptor']));
+                    }
+
                     const descMap = {};
-                    workbookData.chancesTeamRaw.forEach(row => {
+                    rawTeamData.forEach(row => {
                         const desc = row['Descriptor'] || 'Muu';
                         if (!descMap[desc]) {
                             descMap[desc] = { 'Pelitapa / Tilanne': desc, 'Goal For': 0, 'Chance For': 0, 'Goal Against': 0, 'Chance Against': 0 };
@@ -1212,10 +1279,10 @@
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            document.getElementById('chanceChart1Title').innerText = "Pelaajat: Maalipaikat (Chance For vs Against)";
-            document.getElementById('chanceChart2Title').innerText = "Pelaajat: Maalit (Goal For vs Against)";
+            document.getElementById('chanceChart1Title').innerText = "Luleå Pelaajat: Maalipaikat (Chance For vs Against)";
+            document.getElementById('chanceChart2Title').innerText = "Luleå Pelaajat: Maalit (Goal For vs Against)";
 
-            const sorted = [...workbookData.chancesPlayersAggregated].sort((a, b) => b['Chance For'] - a['Chance For']).slice(0, 10);
+            const sorted = [...currentFilteredData].sort((a, b) => b['Chance For'] - a['Chance For']).slice(0, 10);
             const labels = sorted.map(d => d['Player']);
 
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
@@ -1238,7 +1305,7 @@
                 }
             });
 
-            const sortedGoals = [...workbookData.chancesPlayersAggregated].sort((a, b) => b['Goal For'] - a['Goal For']).slice(0, 10);
+            const sortedGoals = [...currentFilteredData].sort((a, b) => b['Goal For'] - a['Goal For']).slice(0, 10);
             const labelsGoals = sortedGoals.map(d => d['Player']);
 
             chanceChart2Instance = new Chart(document.getElementById('chanceChart2').getContext('2d'), {
@@ -1269,27 +1336,16 @@
             document.getElementById('chanceChart1Title').innerText = "Pelitavat: Maalipaikat (Chance For vs Against)";
             document.getElementById('chanceChart2Title').innerText = "Pelitavat: Maalit (Goal For vs Against)";
 
-            const descMap = {};
-            workbookData.chancesTeamRaw.forEach(row => {
-                const desc = row['Descriptor'] || 'Muu';
-                if (!descMap[desc]) descMap[desc] = { desc, chanceFor: 0, chanceAgainst: 0, goalFor: 0, goalAgainst: 0 };
-                descMap[desc].chanceFor += Number(row['Chance For']) || 0;
-                descMap[desc].chanceAgainst += Number(row['Chance Against']) || 0;
-                descMap[desc].goalFor += Number(row['Goal For']) || 0;
-                descMap[desc].goalAgainst += Number(row['Goal Against']) || 0;
-            });
-
-            const arr = Object.values(descMap);
-            const topFor = [...arr].sort((a, b) => b.chanceFor - a.chanceFor).slice(0, 10);
+            const topFor = [...currentFilteredData].sort((a, b) => b['Chance For'] - a['Chance For']).slice(0, 10);
 
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: topFor.map(d => d.desc),
+                    labels: topFor.map(d => d['Pelitapa / Tilanne']),
                     datasets: [
-                        { label: 'Chance For', data: topFor.map(d => d.chanceFor), backgroundColor: '#3b82f6' },
-                        { label: 'Chance Against', data: topFor.map(d => d.chanceAgainst), backgroundColor: '#ef4444' }
+                        { label: 'Chance For', data: topFor.map(d => d['Chance For']), backgroundColor: '#3b82f6' },
+                        { label: 'Chance Against', data: topFor.map(d => d['Chance Against']), backgroundColor: '#ef4444' }
                     ]
                 },
                 options: {
@@ -1302,16 +1358,16 @@
                 }
             });
 
-            const topGoals = [...arr].sort((a, b) => b.goalFor - a.goalFor).slice(0, 10);
+            const topGoals = [...currentFilteredData].sort((a, b) => b['Goal For'] - a['Goal For']).slice(0, 10);
 
             chanceChart2Instance = new Chart(document.getElementById('chanceChart2').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: topGoals.map(d => d.desc),
+                    labels: topGoals.map(d => d['Pelitapa / Tilanne']),
                     datasets: [
-                        { label: 'Goal For', data: topGoals.map(d => d.goalFor), backgroundColor: '#10b981' },
-                        { label: 'Goal Against', data: topGoals.map(d => d.goalAgainst), backgroundColor: '#f59e0b' }
+                        { label: 'Goal For', data: topGoals.map(d => d['Goal For']), backgroundColor: '#10b981' },
+                        { label: 'Goal Against', data: topGoals.map(d => d['Goal Against']), backgroundColor: '#f59e0b' }
                     ]
                 },
                 options: {
