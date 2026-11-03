@@ -57,18 +57,20 @@
         </div>
 
         <!-- Välilehdet (Tabs) -->
-        <div class="max-w-7xl mx-auto px-4 flex gap-2 border-t border-red-900/50 pt-2 pb-1">
-            <button onclick="switchTab('players')" id="tabPlayers" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-red-900 text-white transition">Player Stats</button>
-            <button onclick="switchTab('faceoffs')" id="tabFaceoffs" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition">Faceoffs</button>
-            <button onclick="switchTab('teams')" id="tabTeams" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition">Team Stats</button>
+        <div class="max-w-7xl mx-auto px-4 flex gap-2 border-t border-red-900/50 pt-2 pb-1 overflow-x-auto">
+            <button onclick="switchTab('players')" id="tabPlayers" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-red-900 text-white transition whitespace-nowrap">Player Stats</button>
+            <button onclick="switchTab('compare')" id="tabCompare" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Player Comparison</button>
+            <button onclick="switchTab('faceoffs')" id="tabFaceoffs" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Faceoffs</button>
+            <button onclick="switchTab('teams')" id="tabTeams" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Team Stats</button>
+            <button onclick="switchTab('lines')" id="tabLines" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Forward Lines</button>
         </div>
     </header>
 
     <!-- Main Content -->
     <main class="max-w-[98%] mx-auto px-2 py-6">
 
-        <!-- Stats Table -->
-        <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden mb-8">
+        <!-- Standard Table Container (Players, Faceoffs, Teams, Lines) -->
+        <div id="tableSection" class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden mb-8">
             <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
                 <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Player Statistics (All Games Total)</h2>
                 <div class="flex gap-2">
@@ -83,6 +85,56 @@
                     <thead id="tableHeader" class="bg-slate-950 text-slate-400 uppercase text-[10px] sticky top-0 z-30 border-b border-slate-800"></thead>
                     <tbody id="tableBody" class="divide-y divide-slate-800/60"></tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- Comparison Section (Näkyy vain Compare-välilehdellä) -->
+        <div id="comparisonSection" class="space-y-6" style="display: none;">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
+                <h2 class="text-sm font-bold uppercase tracking-wide text-red-400 mb-4">Player Head-to-Head Comparison</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <!-- Player 1 Selector -->
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg">
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Select Player 1</label>
+                        <select id="comparePlayer1" class="w-full bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-2 focus:outline-none">
+                        </select>
+                        <div id="p1Card" class="mt-4 space-y-1 text-xs"></div>
+                    </div>
+
+                    <!-- Player 2 Selector -->
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg">
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Select Player 2</label>
+                        <select id="comparePlayer2" class="w-full bg-slate-900 border border-blue-800 text-white text-sm rounded px-3 py-2 focus:outline-none">
+                        </select>
+                        <div id="p2Card" class="mt-4 space-y-1 text-xs"></div>
+                    </div>
+                </div>
+
+                <!-- Comparison Chart and Table -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg h-96">
+                        <h3 class="text-xs font-bold uppercase text-slate-300 mb-2">Visual Metric Comparison</h3>
+                        <div class="relative h-80">
+                            <canvas id="compareChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg overflow-x-auto custom-scrollbar">
+                        <h3 class="text-xs font-bold uppercase text-slate-300 mb-2">Detailed Comparison Table</h3>
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead class="bg-slate-900 text-slate-400 uppercase text-[10px]">
+                                <tr>
+                                    <th class="p-2">Metric</th>
+                                    <th class="p-2 text-red-400 font-bold" id="p1ColHeader">Player 1</th>
+                                    <th class="p-2 text-blue-400 font-bold" id="p2ColHeader">Player 2</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compareTableBody" class="divide-y divide-slate-800/60 text-slate-300">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -151,8 +203,10 @@
     <script>
         let workbookData = {
             playersRaw: [],
+            playersAggregated: [],
             faceoffsRaw: [],
-            teamsRaw: []
+            teamsRaw: [],
+            linesRaw: []
         };
         let currentTab = 'players';
         let currentFilteredData = [];
@@ -163,8 +217,8 @@
         let chart3Instance = null;
         let teamChart1Instance = null;
         let teamChart2Instance = null;
+        let compareChartInstance = null;
 
-        // Apufunktio joukkueen nimen normalisointiin (esim. MODO -> Modo, Lulea/MSSK -> Lulea)
         function normalizeTeamName(name) {
             if (!name) return '-';
             const clean = String(name).trim();
@@ -299,21 +353,147 @@
                     return row;
                 });
             }
+
+            // 4. Forward lines
+            if (workbook.Sheets['Forward lines']) {
+                let tempLines = XLSX.utils.sheet_to_json(workbook.Sheets['Forward lines'], { defval: "-" });
+                workbookData.linesRaw = tempLines.map(row => {
+                    if (row['Team']) row['Team'] = normalizeTeamName(row['Team']);
+                    return row;
+                });
+            }
             
             populateGameFilter();
             populateTeamFilter();
+            buildAggregatedPlayers();
+            populateCompareDropdowns();
             switchTab('players');
+        }
+
+        function buildAggregatedPlayers() {
+            const aggregated = {};
+            const counts = {};
+            const toiSeconds = {};
+            const totalGs = {};
+
+            workbookData.playersRaw.forEach(row => {
+                const player = row['Player'];
+                if (!player || player === '-') return;
+
+                if (!aggregated[player]) {
+                    aggregated[player] = { ...row };
+                    delete aggregated[player]['Home/away'];
+                    delete aggregated[player]['Date'];
+                    delete aggregated[player]['Opponent'];
+                    delete aggregated[player]['Game ID'];
+
+                    counts[player] = 1;
+                    toiSeconds[player] = timeToSecs(row['Time on ice']);
+                    totalGs[player] = row['Game Score'] || 0;
+
+                    Object.keys(row).forEach(key => {
+                        if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Games', 'Game Score / 60'].includes(key)) {
+                            if (key === 'Time on ice') {
+                                aggregated[player][key] = toiSeconds[player];
+                            } else if (key.includes('%')) {
+                                let cleanVal = parseFloat(String(row[key]).replace('%', ''));
+                                aggregated[player][key] = isNaN(cleanVal) ? 0 : cleanVal;
+                            } else {
+                                let val = parseFloat(row[key]);
+                                aggregated[player][key] = isNaN(val) ? row[key] : val;
+                            }
+                        }
+                    });
+                } else {
+                    counts[player]++;
+                    toiSeconds[player] += timeToSecs(row['Time on ice']);
+                    totalGs[player] += row['Game Score'] || 0;
+
+                    Object.keys(row).forEach(key => {
+                        if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Games', 'Game Score / 60'].includes(key)) {
+                            if (key === 'Time on ice') {
+                                aggregated[player][key] = toiSeconds[player];
+                            } else if (key.includes('%')) {
+                                let cleanVal = parseFloat(String(row[key]).replace('%', ''));
+                                if (!isNaN(cleanVal)) {
+                                    aggregated[player][key] += cleanVal;
+                                }
+                            } else {
+                                let val = parseFloat(row[key]);
+                                if (!isNaN(val)) {
+                                    aggregated[player][key] = (Number(aggregated[player][key]) || 0) + val;
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+
+            Object.keys(aggregated).forEach(player => {
+                const c = counts[player] || 1;
+                const totalSecs = toiSeconds[player] || 0;
+                const gsSum = totalGs[player] || 0;
+
+                aggregated[player]['Games'] = c;
+
+                Object.keys(aggregated[player]).forEach(key => {
+                    if (key === 'Time on ice') {
+                        aggregated[player][key] = secsToTime(totalSecs);
+                    } else if (key.includes('%')) {
+                        aggregated[player][key] = (aggregated[player][key] / c).toFixed(1) + '%';
+                    } else if (key === 'Game Score') {
+                        aggregated[player][key] = Number(gsSum.toFixed(2));
+                    }
+                });
+
+                aggregated[player]['Game Score / 60'] = totalSecs > 0 ? Number((gsSum / (totalSecs / 3600)).toFixed(2)) : 0.0;
+                aggregated[player] = reorderRowKeys(aggregated[player]);
+            });
+
+            workbookData.playersAggregated = Object.values(aggregated);
+        }
+
+        function populateCompareDropdowns() {
+            const select1 = document.getElementById('comparePlayer1');
+            const select2 = document.getElementById('comparePlayer2');
+            if (!select1 || !select2) return;
+
+            const players = workbookData.playersAggregated.map(p => p['Player']).sort();
+
+            select1.innerHTML = '';
+            select2.innerHTML = '';
+
+            players.forEach((p, index) => {
+                select1.innerHTML += `<option value="${p}">${p}</option>`;
+                select2.innerHTML += `<option value="${p}">${p}</option>`;
+            });
+
+            if (players.length > 1) {
+                select2.selectedIndex = 1;
+            }
+
+            select1.removeEventListener('change', updatePlayerComparison);
+            select2.removeEventListener('change', updatePlayerComparison);
+            select1.addEventListener('change', updatePlayerComparison);
+            select2.addEventListener('change', updatePlayerComparison);
         }
 
         function switchTab(tabName) {
             currentTab = tabName;
             
-            document.getElementById('tabPlayers').className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition ${tabName === 'players' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
-            document.getElementById('tabFaceoffs').className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition ${tabName === 'faceoffs' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
-            document.getElementById('tabTeams').className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition ${tabName === 'teams' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+            const tabs = ['players', 'compare', 'faceoffs', 'teams', 'lines'];
+            tabs.forEach(t => {
+                const btn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+                if (btn) {
+                    btn.className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition whitespace-nowrap ${tabName === t ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+                }
+            });
+
+            document.getElementById('tableSection').style.display = (tabName === 'compare') ? 'none' : 'block';
+            document.getElementById('comparisonSection').style.display = (tabName === 'compare') ? 'block' : 'none';
 
             document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
-            document.getElementById('teamFilterContainer').style.display = (tabName === 'teams') ? 'none' : 'block';
+            document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare') ? 'none' : 'block';
             document.getElementById('chartsContainer').style.display = (tabName === 'players') ? 'grid' : 'none';
             document.getElementById('teamChartsContainer').style.display = (tabName === 'teams') ? 'grid' : 'none';
 
@@ -326,6 +506,8 @@
 
             if (currentTab === 'players') {
                 filterData();
+            } else if (currentTab === 'compare') {
+                updatePlayerComparison();
             } else if (currentTab === 'faceoffs') {
                 document.getElementById('tableTitle').innerText = "Faceoffs Statistics";
                 let data = [...workbookData.faceoffsRaw];
@@ -339,7 +521,115 @@
                 currentFilteredData = [...workbookData.teamsRaw];
                 renderTable();
                 renderTeamCharts();
+            } else if (currentTab === 'lines') {
+                document.getElementById('tableTitle').innerText = "Forward Lines Statistics";
+                let data = [...workbookData.linesRaw];
+                if (selectedTeam !== 'all') {
+                    data = data.filter(row => String(row['Team']) === selectedTeam);
+                }
+                currentFilteredData = data;
+                renderTable();
             }
+        }
+
+        function updatePlayerComparison() {
+            const p1Name = document.getElementById('comparePlayer1').value;
+            const p2Name = document.getElementById('comparePlayer2').value;
+
+            const p1 = workbookData.playersAggregated.find(p => p['Player'] === p1Name) || {};
+            const p2 = workbookData.playersAggregated.find(p => p['Player'] === p2Name) || {};
+
+            document.getElementById('p1ColHeader').innerText = p1Name || 'Player 1';
+            document.getElementById('p2ColHeader').innerText = p2Name || 'Player 2';
+
+            document.getElementById('p1Card').innerHTML = `
+                <p><span class="font-bold text-slate-400">Team:</span> ${p1['Team'] || '-'}</p>
+                <p><span class="font-bold text-slate-400">Position:</span> ${p1['Position'] || '-'}</p>
+                <p><span class="font-bold text-slate-400">Games Played:</span> ${p1['Games'] || 0}</p>
+                <p><span class="font-bold text-red-400">Game Score:</span> ${p1['Game Score'] || 0}</p>
+                <p><span class="font-bold text-red-400">Game Score / 60:</span> ${p1['Game Score / 60'] || 0}</p>
+            `;
+
+            document.getElementById('p2Card').innerHTML = `
+                <p><span class="font-bold text-slate-400">Team:</span> ${p2['Team'] || '-'}</p>
+                <p><span class="font-bold text-slate-400">Position:</span> ${p2['Position'] || '-'}</p>
+                <p><span class="font-bold text-slate-400">Games Played:</span> ${p2['Games'] || 0}</p>
+                <p><span class="font-bold text-blue-400">Game Score:</span> ${p2['Game Score'] || 0}</p>
+                <p><span class="font-bold text-blue-400">Game Score / 60:</span> ${p2['Game Score / 60'] || 0}</p>
+            `;
+
+            const metrics = [
+                { key: 'Goals', name: 'Goals' },
+                { key: 'Assists', name: 'Assists' },
+                { key: 'Points', name: 'Points' },
+                { key: 'xG (Expected goals)', name: 'xG' },
+                { key: 'Shots on goal', name: 'Shots on Goal' },
+                { key: 'CORSI', name: 'CORSI' },
+                { key: 'Game Score', name: 'Game Score' },
+                { key: 'Game Score / 60', name: 'Game Score / 60' }
+            ];
+
+            const tbody = document.getElementById('compareTableBody');
+            tbody.innerHTML = metrics.map(m => {
+                let v1 = Number(p1[m.key] || p1[Object.keys(p1).find(k => k.toLowerCase().includes(m.name.toLowerCase()))] || 0);
+                let v2 = Number(p2[m.key] || p2[Object.keys(p2).find(k => k.toLowerCase().includes(m.name.toLowerCase()))] || 0);
+                
+                if (m.name === 'Points') {
+                    v1 = (Number(p1['Goals']) || 0) + (Number(p1['Assists']) || 0);
+                    v2 = (Number(p2['Goals']) || 0) + (Number(p2['Assists']) || 0);
+                }
+
+                const c1 = v1 > v2 ? 'text-red-400 font-bold' : '';
+                const c2 = v2 > v1 ? 'text-blue-400 font-bold' : '';
+
+                return `<tr>
+                    <td class="p-2 font-bold text-slate-400">${m.name}</td>
+                    <td class="p-2 ${c1}">${Number.isInteger(v1) ? v1 : v1.toFixed(2)}</td>
+                    <td class="p-2 ${c2}">${Number.isInteger(v2) ? v2 : v2.toFixed(2)}</td>
+                </tr>`;
+            }).join('');
+
+            // Chart
+            if (compareChartInstance) compareChartInstance.destroy();
+
+            const chartMetrics = ['Goals', 'Assists', 'Points', 'xG', 'Game Score'];
+            const p1ChartData = [
+                Number(p1['Goals']) || 0,
+                Number(p1['Assists']) || 0,
+                (Number(p1['Goals']) || 0) + (Number(p1['Assists']) || 0),
+                Number(p1['xG (Expected goals)'] || p1['xG'] || 0),
+                Number(p1['Game Score']) || 0
+            ];
+            const p2ChartData = [
+                Number(p2['Goals']) || 0,
+                Number(p2['Assists']) || 0,
+                (Number(p2['Goals']) || 0) + (Number(p2['Assists']) || 0),
+                Number(p2['xG (Expected goals)'] || p2['xG'] || 0),
+                Number(p2['Game Score']) || 0
+            ];
+
+            compareChartInstance = new Chart(document.getElementById('compareChart').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: chartMetrics,
+                    datasets: [
+                        { label: p1Name || 'Player 1', data: p1ChartData, backgroundColor: '#ef4444' },
+                        { label: p2Name || 'Player 2', data: p2ChartData, backgroundColor: '#3b82f6' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9, weight: 'bold' } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 10 } } },
+                        y: { ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
         }
 
         function populateGameFilter() {
@@ -392,86 +682,7 @@
             let baseData = [];
 
             if (selectedGame === 'all') {
-                const aggregated = {};
-                const counts = {};
-                const toiSeconds = {};
-                const totalGs = {};
-
-                workbookData.playersRaw.forEach(row => {
-                    const player = row['Player'];
-                    if (!player || player === '-') return;
-
-                    if (!aggregated[player]) {
-                        aggregated[player] = { ...row };
-                        delete aggregated[player]['Home/away'];
-                        delete aggregated[player]['Date'];
-                        delete aggregated[player]['Opponent'];
-                        delete aggregated[player]['Game ID'];
-
-                        counts[player] = 1;
-                        toiSeconds[player] = timeToSecs(row['Time on ice']);
-                        totalGs[player] = row['Game Score'] || 0;
-
-                        Object.keys(row).forEach(key => {
-                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Games', 'Game Score / 60'].includes(key)) {
-                                if (key === 'Time on ice') {
-                                    aggregated[player][key] = toiSeconds[player];
-                                } else if (key.includes('%')) {
-                                    let cleanVal = parseFloat(String(row[key]).replace('%', ''));
-                                    aggregated[player][key] = isNaN(cleanVal) ? 0 : cleanVal;
-                                } else {
-                                    let val = parseFloat(row[key]);
-                                    aggregated[player][key] = isNaN(val) ? row[key] : val;
-                                }
-                            }
-                        });
-                    } else {
-                        counts[player]++;
-                        toiSeconds[player] += timeToSecs(row['Time on ice']);
-                        totalGs[player] += row['Game Score'] || 0;
-
-                        Object.keys(row).forEach(key => {
-                            if (!['Home/away', 'Date', 'Opponent', 'Game ID', 'Team', 'Shirt number', 'Player', 'Position', 'Games', 'Game Score / 60'].includes(key)) {
-                                if (key === 'Time on ice') {
-                                    aggregated[player][key] = toiSeconds[player];
-                                } else if (key.includes('%')) {
-                                    let cleanVal = parseFloat(String(row[key]).replace('%', ''));
-                                    if (!isNaN(cleanVal)) {
-                                        aggregated[player][key] += cleanVal;
-                                    }
-                                } else {
-                                    let val = parseFloat(row[key]);
-                                    if (!isNaN(val)) {
-                                        aggregated[player][key] = (Number(aggregated[player][key]) || 0) + val;
-                                    }
-                                }
-                            }
-                        });
-                    }
-                });
-
-                Object.keys(aggregated).forEach(player => {
-                    const c = counts[player] || 1;
-                    const totalSecs = toiSeconds[player] || 0;
-                    const gsSum = totalGs[player] || 0;
-
-                    aggregated[player]['Games'] = c;
-
-                    Object.keys(aggregated[player]).forEach(key => {
-                        if (key === 'Time on ice') {
-                            aggregated[player][key] = secsToTime(totalSecs);
-                        } else if (key.includes('%')) {
-                            aggregated[player][key] = (aggregated[player][key] / c).toFixed(1) + '%';
-                        } else if (key === 'Game Score') {
-                            aggregated[player][key] = Number(gsSum.toFixed(2));
-                        }
-                    });
-
-                    aggregated[player]['Game Score / 60'] = totalSecs > 0 ? Number((gsSum / (totalSecs / 3600)).toFixed(2)) : 0.0;
-                    aggregated[player] = reorderRowKeys(aggregated[player]);
-                });
-
-                baseData = Object.values(aggregated);
+                baseData = [...workbookData.playersAggregated];
                 document.getElementById('tableTitle').innerText = "Player Statistics - All Games Total";
             } else {
                 const [date, matchTeams] = selectedGame.split('___');
@@ -536,7 +747,7 @@
 
             const searchTerm = document.getElementById('playerSearch').value.toLowerCase();
             const filtered = currentFilteredData.filter(row => {
-                const name = String(row['Player'] || row['Team'] || '').toLowerCase();
+                const name = String(row['Player'] || row['Team'] || row['Line'] || '').toLowerCase();
                 const pos = String(row['Position'] || '').toLowerCase();
                 const team = String(row['Team'] || '').toLowerCase();
                 return name.includes(searchTerm) || pos.includes(searchTerm) || team.includes(searchTerm);
@@ -551,7 +762,7 @@
                     if (h === 'Team') stickyClass = 'sticky-col-team';
                     else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
                     else if (h === 'Player') stickyClass = 'sticky-col-player';
-                } else if (currentTab === 'teams') {
+                } else if (currentTab === 'teams' || currentTab === 'lines') {
                     if (h === 'Team') stickyClass = 'sticky-col-team';
                 }
                 return `<th class="px-3 py-2 cursor-pointer hover:text-white underline ${stickyClass}" onclick="sortTable('${h}')">${h} ${currentSortColumn === h ? (isAscending ? '▲' : '▼') : ''}</th>`;
@@ -574,7 +785,7 @@
                                 stickyClass = 'sticky-col-player';
                                 return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline ${stickyClass}" onclick="openPlayerModal('${playerName}')">${val}</td>`;
                             }
-                        } else if (currentTab === 'teams') {
+                        } else if (currentTab === 'teams' || currentTab === 'lines') {
                             if (h === 'Team') stickyClass = 'sticky-col-team text-red-400 font-bold';
                         }
                         return `<td class="px-3 py-2 text-slate-300 ${stickyClass}">${val}</td>`;
