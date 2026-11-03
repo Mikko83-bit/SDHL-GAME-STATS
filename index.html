@@ -50,8 +50,8 @@
                 </div>
 
                 <div>
-                    <label class="block text-[10px] text-red-200 uppercase font-bold">Upload New Excel</label>
-                    <input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" class="text-xs text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-red-900 file:text-white hover:file:bg-red-800 cursor-pointer">
+                    <label class="block text-[10px] text-red-200 uppercase font-bold">Upload Excels</label>
+                    <input type="file" id="excelUpload" multiple accept=".xlsx, .xls, .csv" class="text-xs text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-red-900 file:text-white hover:file:bg-red-800 cursor-pointer">
                 </div>
             </div>
         </div>
@@ -63,13 +63,14 @@
             <button onclick="switchTab('faceoffs')" id="tabFaceoffs" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Faceoffs</button>
             <button onclick="switchTab('teams')" id="tabTeams" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Team Stats</button>
             <button onclick="switchTab('lines')" id="tabLines" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Forward Lines</button>
+            <button onclick="switchTab('chances')" id="tabChances" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Scoring Chances</button>
         </div>
     </header>
 
     <!-- Main Content -->
     <main class="max-w-[98%] mx-auto px-2 py-6">
 
-        <!-- Standard Table Container (Players, Faceoffs, Teams, Lines) -->
+        <!-- Standard Table Container -->
         <div id="tableSection" class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden mb-8">
             <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
                 <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Player Statistics (All Games Total)</h2>
@@ -88,13 +89,12 @@
             </div>
         </div>
 
-        <!-- Comparison Section (Näkyy vain Compare-välilehdellä) -->
+        <!-- Comparison Section -->
         <div id="comparisonSection" class="space-y-6" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
                 <h2 class="text-sm font-bold uppercase tracking-wide text-red-400 mb-4">Player Head-to-Head Comparison</h2>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <!-- Player 1 Selector -->
                     <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-3">
                         <div>
                             <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Filter Team 1</label>
@@ -110,7 +110,6 @@
                         <div id="p1Card" class="mt-4 space-y-1 text-xs"></div>
                     </div>
 
-                    <!-- Player 2 Selector -->
                     <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-3">
                         <div>
                             <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Filter Team 2</label>
@@ -127,7 +126,6 @@
                     </div>
                 </div>
 
-                <!-- Comparison Chart and Table -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg h-96">
                         <h3 class="text-xs font-bold uppercase text-slate-300 mb-2">Visual Metric Comparison</h3>
@@ -192,6 +190,22 @@
             </div>
         </div>
 
+        <!-- Scoring Chances Charts Container -->
+        <div id="chancesChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6" style="display: none;">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 id="chanceChart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Top Scoring Chances For</h3>
+                <div class="relative h-80">
+                    <canvas id="chanceChart1"></canvas>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Pelitapatilastot / Descriptors</h3>
+                <div class="relative h-80">
+                    <canvas id="chanceChart2"></canvas>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- Player Game History Modal -->
@@ -222,7 +236,10 @@
             playersAggregated: [],
             faceoffsRaw: [],
             teamsRaw: [],
-            linesRaw: []
+            linesRaw: [],
+            chancesPlayersRaw: [],
+            chancesPlayersAggregated: [],
+            chancesTeamRaw: []
         };
         let currentTab = 'players';
         let currentFilteredData = [];
@@ -234,6 +251,8 @@
         let teamChart1Instance = null;
         let teamChart2Instance = null;
         let compareChartInstance = null;
+        let chanceChart1Instance = null;
+        let chanceChart2Instance = null;
 
         function normalizeTeamName(name) {
             if (!name) return '-';
@@ -312,26 +331,46 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
+            // Ladataan pääpeli-excel
             try {
                 const response = await fetch('Sdhl Game score 2026-2027.xlsx');
                 if (response.ok) {
                     const arrayBuffer = await response.arrayBuffer();
-                    processExcelData(arrayBuffer);
+                    processMainExcel(arrayBuffer);
                 }
             } catch (e) {
-                console.log('Load Excel manually.');
+                console.log('Main excel load manual.');
+            }
+
+            // Ladataan scoring chances -excel
+            try {
+                const response2 = await fetch('SDHL 2026-2027 scoring chances.xlsx');
+                if (response2.ok) {
+                    const arrayBuffer2 = await response2.arrayBuffer();
+                    processChancesExcel(arrayBuffer2);
+                }
+            } catch (e) {
+                console.log('Chances excel load manual.');
             }
         });
 
         document.getElementById('excelUpload').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => { processExcelData(event.target.result); };
-            reader.readAsArrayBuffer(file);
+            const files = e.target.files;
+            for (let file of files) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const arrayBuffer = event.target.result;
+                    if (file.name.toLowerCase().includes('chance')) {
+                        processChancesExcel(arrayBuffer);
+                    } else {
+                        processMainExcel(arrayBuffer);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
         });
 
-        function processExcelData(arrayBuffer) {
+        function processMainExcel(arrayBuffer) {
             const data = new Uint8Array(arrayBuffer);
             const workbook = XLSX.read(data, { type: 'array' });
             
@@ -379,7 +418,25 @@
             populateTeamFilter();
             buildAggregatedPlayers();
             setupCompareFilters();
-            switchTab('players');
+            switchTab(currentTab);
+        }
+
+        function processChancesExcel(arrayBuffer) {
+            const data = new Uint8Array(arrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+
+            if (workbook.Sheets['Players']) {
+                workbookData.chancesPlayersRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Players'], { defval: 0 });
+                buildAggregatedChancesPlayers();
+            }
+
+            if (workbook.Sheets['Team']) {
+                workbookData.chancesTeamRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Team'], { defval: 0 });
+            }
+
+            if (currentTab === 'chances') {
+                renderCurrentView();
+            }
         }
 
         function buildAggregatedPlayers() {
@@ -465,6 +522,33 @@
             workbookData.playersAggregated = Object.values(aggregated);
         }
 
+        function buildAggregatedChancesPlayers() {
+            const aggregated = {};
+            workbookData.chancesPlayersRaw.forEach(row => {
+                const num = row['Number'];
+                if (!num) return;
+
+                if (!aggregated[num]) {
+                    aggregated[num] = {
+                        'Player Number': num,
+                        'Goal For': 0,
+                        'Chance For': 0,
+                        'PP Goal': 0,
+                        'PP Chance': 0,
+                        'Goal Against': 0,
+                        'Chance Against': 0
+                    };
+                }
+                aggregated[num]['Goal For'] += Number(row['Goal For']) || 0;
+                aggregated[num]['Chance For'] += Number(row['Chance For']) || 0;
+                aggregated[num]['PP Goal'] += Number(row['PP goal']) || 0;
+                aggregated[num]['PP Chance'] += Number(row['PP chance']) || 0;
+                aggregated[num]['Goal Against'] += Number(row['Goal Against']) || 0;
+                aggregated[num]['Chance Against'] += Number(row['Chance Against']) || 0;
+            });
+            workbookData.chancesPlayersAggregated = Object.values(aggregated);
+        }
+
         function setupCompareFilters() {
             const teamSelect1 = document.getElementById('compareTeam1');
             const teamSelect2 = document.getElementById('compareTeam2');
@@ -513,7 +597,7 @@
         function switchTab(tabName) {
             currentTab = tabName;
             
-            const tabs = ['players', 'compare', 'faceoffs', 'teams', 'lines'];
+            const tabs = ['players', 'compare', 'faceoffs', 'teams', 'lines', 'chances'];
             tabs.forEach(t => {
                 const btn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
                 if (btn) {
@@ -525,9 +609,11 @@
             document.getElementById('comparisonSection').style.display = (tabName === 'compare') ? 'block' : 'none';
 
             document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
-            document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare') ? 'none' : 'block';
+            document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare' || tabName === 'chances') ? 'none' : 'block';
+            
             document.getElementById('chartsContainer').style.display = (tabName === 'players') ? 'grid' : 'none';
             document.getElementById('teamChartsContainer').style.display = (tabName === 'teams') ? 'grid' : 'none';
+            document.getElementById('chancesChartsContainer').style.display = (tabName === 'chances') ? 'grid' : 'none';
 
             currentSortColumn = null;
             renderCurrentView();
@@ -561,6 +647,24 @@
                 }
                 currentFilteredData = data;
                 renderTable();
+            } else if (currentTab === 'chances') {
+                document.getElementById('tableTitle').innerText = "Scoring Chances & Play Styles (Team Descriptors)";
+                
+                const descMap = {};
+                workbookData.chancesTeamRaw.forEach(row => {
+                    const desc = row['Descriptor'] || 'Muu';
+                    if (!descMap[desc]) {
+                        descMap[desc] = { 'Pelitapa / Tilanne': desc, 'Goal For': 0, 'Chance For': 0, 'Goal Against': 0, 'Chance Against': 0 };
+                    }
+                    descMap[desc]['Goal For'] += Number(row['Goal For']) || 0;
+                    descMap[desc]['Chance For'] += Number(row['Chance For']) || 0;
+                    descMap[desc]['Goal Against'] += Number(row['Goal Against']) || 0;
+                    descMap[desc]['Chance Against'] += Number(row['Chance Against']) || 0;
+                });
+
+                currentFilteredData = Object.values(descMap);
+                renderTable();
+                renderChancesCharts();
             }
         }
 
@@ -778,10 +882,8 @@
 
             const searchTerm = document.getElementById('playerSearch').value.toLowerCase();
             const filtered = currentFilteredData.filter(row => {
-                const name = String(row['Player'] || row['Team'] || row['Line'] || '').toLowerCase();
-                const pos = String(row['Position'] || '').toLowerCase();
-                const team = String(row['Team'] || '').toLowerCase();
-                return name.includes(searchTerm) || pos.includes(searchTerm) || team.includes(searchTerm);
+                const text = Object.values(row).join(' ').toLowerCase();
+                return text.includes(searchTerm);
             });
 
             const headers = Object.keys(currentFilteredData[0]);
@@ -1080,6 +1182,57 @@
             });
         }
 
+        function renderChancesCharts() {
+            if (chanceChart1Instance) chanceChart1Instance.destroy();
+            if (chanceChart2Instance) chanceChart2Instance.destroy();
+
+            const descMap = {};
+            workbookData.chancesTeamRaw.forEach(row => {
+                const desc = row['Descriptor'] || 'Muu';
+                if (!descMap[desc]) descMap[desc] = { desc, chanceFor: 0, chanceAgainst: 0 };
+                descMap[desc].chanceFor += Number(row['Chance For']) || 0;
+                descMap[desc].chanceAgainst += Number(row['Chance Against']) || 0;
+            });
+
+            const arr = Object.values(descMap);
+            const topFor = [...arr].sort((a, b) => b.chanceFor - a.chanceFor).slice(0, 10);
+            const topAgainst = [...arr].sort((a, b) => b.chanceAgainst - a.chanceAgainst).slice(0, 10);
+
+            chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: topFor.map(d => d.desc),
+                    datasets: [{ label: 'Chance For', data: topFor.map(d => d.chanceFor), backgroundColor: '#3b82f6' }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                    },
+                    scales: { x: { ticks: { color: '#94a3b8', font: { size: 9, maxRotation: 45, minRotation: 45 } } }, y: { ticks: { color: '#94a3b8' } } }
+                }
+            });
+
+            chanceChart2Instance = new Chart(document.getElementById('chanceChart2').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: topAgainst.map(d => d.desc),
+                    datasets: [{ label: 'Chance Against', data: topAgainst.map(d => d.chanceAgainst), backgroundColor: '#ef4444' }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                    },
+                    scales: { x: { ticks: { color: '#94a3b8', font: { size: 9, maxRotation: 45, minRotation: 45 } } }, y: { ticks: { color: '#94a3b8' } } }
+                }
+            });
+        }
+
         function copyTable() {
             const table = document.getElementById('statsTable');
             let text = "";
@@ -1095,7 +1248,7 @@
         function exportCSV() {
             if (currentFilteredData.length === 0) return;
             const headers = Object.keys(currentFilteredData[0]);
-            let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
+            let csvContent = "data:text/csv;charset=utf-8," + headers.json(",") + "\n"; // korjattu
             currentFilteredData.forEach(row => {
                 csvContent += headers.map(h => `"${row[h] !== undefined ? row[h] : ''}"`).join(",") + "\n";
             });
