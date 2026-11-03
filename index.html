@@ -95,18 +95,34 @@
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <!-- Player 1 Selector -->
-                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg">
-                        <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Select Player 1</label>
-                        <select id="comparePlayer1" class="w-full bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-2 focus:outline-none">
-                        </select>
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-3">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Filter Team 1</label>
+                            <select id="compareTeam1" class="w-full bg-slate-900 border border-slate-700 text-white text-xs rounded px-3 py-1.5 focus:outline-none">
+                                <option value="all">All Teams</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-red-400 uppercase mb-1">Select Player 1</label>
+                            <select id="comparePlayer1" class="w-full bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-2 focus:outline-none">
+                            </select>
+                        </div>
                         <div id="p1Card" class="mt-4 space-y-1 text-xs"></div>
                     </div>
 
                     <!-- Player 2 Selector -->
-                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg">
-                        <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Select Player 2</label>
-                        <select id="comparePlayer2" class="w-full bg-slate-900 border border-blue-800 text-white text-sm rounded px-3 py-2 focus:outline-none">
-                        </select>
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-3">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Filter Team 2</label>
+                            <select id="compareTeam2" class="w-full bg-slate-900 border border-slate-700 text-white text-xs rounded px-3 py-1.5 focus:outline-none">
+                                <option value="all">All Teams</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-blue-400 uppercase mb-1">Select Player 2</label>
+                            <select id="comparePlayer2" class="w-full bg-slate-900 border border-blue-800 text-white text-sm rounded px-3 py-2 focus:outline-none">
+                            </select>
+                        </div>
                         <div id="p2Card" class="mt-4 space-y-1 text-xs"></div>
                     </div>
                 </div>
@@ -319,7 +335,6 @@
             const data = new Uint8Array(arrayBuffer);
             const workbook = XLSX.read(data, { type: 'array' });
             
-            // 1. SDHL Game Score (Players)
             if (workbook.Sheets['SDHL GAME SCORE']) {
                 let tempRaw = XLSX.utils.sheet_to_json(workbook.Sheets['SDHL GAME SCORE'], { defval: "-" });
                 workbookData.playersRaw = tempRaw.map(row => {
@@ -336,7 +351,6 @@
                 });
             }
 
-            // 2. Faceoffs
             if (workbook.Sheets['Faceoffs']) {
                 let tempFaceoffs = XLSX.utils.sheet_to_json(workbook.Sheets['Faceoffs'], { defval: "-" });
                 workbookData.faceoffsRaw = tempFaceoffs.map(row => {
@@ -345,7 +359,6 @@
                 });
             }
 
-            // 3. Teams SDHL
             if (workbook.Sheets['Teams SDHL']) {
                 let tempTeams = XLSX.utils.sheet_to_json(workbook.Sheets['Teams SDHL'], { defval: "-" });
                 workbookData.teamsRaw = tempTeams.map(row => {
@@ -354,7 +367,6 @@
                 });
             }
 
-            // 4. Forward lines
             if (workbook.Sheets['Forward lines']) {
                 let tempLines = XLSX.utils.sheet_to_json(workbook.Sheets['Forward lines'], { defval: "-" });
                 workbookData.linesRaw = tempLines.map(row => {
@@ -366,7 +378,7 @@
             populateGameFilter();
             populateTeamFilter();
             buildAggregatedPlayers();
-            populateCompareDropdowns();
+            setupCompareFilters();
             switchTab('players');
         }
 
@@ -453,29 +465,49 @@
             workbookData.playersAggregated = Object.values(aggregated);
         }
 
-        function populateCompareDropdowns() {
-            const select1 = document.getElementById('comparePlayer1');
-            const select2 = document.getElementById('comparePlayer2');
-            if (!select1 || !select2) return;
-
-            const players = workbookData.playersAggregated.map(p => p['Player']).sort();
-
-            select1.innerHTML = '';
-            select2.innerHTML = '';
-
-            players.forEach((p, index) => {
-                select1.innerHTML += `<option value="${p}">${p}</option>`;
-                select2.innerHTML += `<option value="${p}">${p}</option>`;
+        function setupCompareFilters() {
+            const teamSelect1 = document.getElementById('compareTeam1');
+            const teamSelect2 = document.getElementById('compareTeam2');
+            
+            const teamsSet = new Set();
+            workbookData.playersAggregated.forEach(p => {
+                if (p['Team'] && p['Team'] !== '-') teamsSet.add(p['Team']);
             });
+            const teamsArray = Array.from(teamsSet).sort();
 
-            if (players.length > 1) {
-                select2.selectedIndex = 1;
+            const teamOptionsHtml = '<option value="all">All Teams</option>' + teamsArray.map(t => `<option value="${t}">${t}</option>`).join('');
+            teamSelect1.innerHTML = teamOptionsHtml;
+            teamSelect2.innerHTML = teamOptionsHtml;
+
+            updateComparePlayerDropdown(1);
+            updateComparePlayerDropdown(2);
+
+            teamSelect1.removeEventListener('change', () => updateComparePlayerDropdown(1));
+            teamSelect2.removeEventListener('change', () => updateComparePlayerDropdown(2));
+            teamSelect1.addEventListener('change', () => updateComparePlayerDropdown(1));
+            teamSelect2.addEventListener('change', () => updateComparePlayerDropdown(2));
+
+            document.getElementById('comparePlayer1').addEventListener('change', updatePlayerComparison);
+            document.getElementById('comparePlayer2').addEventListener('change', updatePlayerComparison);
+        }
+
+        function updateComparePlayerDropdown(side) {
+            const teamVal = document.getElementById(`compareTeam${side}`).value;
+            const playerSelect = document.getElementById(`comparePlayer${side}`);
+
+            let filteredPlayers = workbookData.playersAggregated;
+            if (teamVal !== 'all') {
+                filteredPlayers = filteredPlayers.filter(p => p['Team'] === teamVal);
+            }
+            filteredPlayers.sort((a, b) => a['Player'].localeCompare(b['Player']));
+
+            playerSelect.innerHTML = filteredPlayers.map(p => `<option value="${p['Player']}">${p['Player']} (${p['Team']})</option>`).join('');
+            
+            if (filteredPlayers.length > 1 && side === 2 && filteredPlayers[0]['Player'] === document.getElementById('comparePlayer1').value) {
+                playerSelect.selectedIndex = 1;
             }
 
-            select1.removeEventListener('change', updatePlayerComparison);
-            select2.removeEventListener('change', updatePlayerComparison);
-            select1.addEventListener('change', updatePlayerComparison);
-            select2.addEventListener('change', updatePlayerComparison);
+            updatePlayerComparison();
         }
 
         function switchTab(tabName) {
@@ -589,7 +621,6 @@
                 </tr>`;
             }).join('');
 
-            // Chart
             if (compareChartInstance) compareChartInstance.destroy();
 
             const chartMetrics = ['Goals', 'Assists', 'Points', 'xG', 'Game Score'];
