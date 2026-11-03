@@ -408,15 +408,15 @@
                 isAscending = !isAscending;
             } else {
                 currentSortColumn = column;
-                isAscending = false;
+                isAscending = false; // Oletuksena isoin ensin (laskeva)
             }
 
             currentFilteredData.sort((a, b) => {
                 let valA = a[column];
                 let valB = b[column];
 
-                if (valA === undefined || valA === '-') valA = -999999;
-                if (valB === undefined || valB === '-') valB = -999999;
+                if (valA === undefined || valA === '-' || valA === '') valA = -999999;
+                if (valB === undefined || valB === '-' || valB === '') valB = -999999;
 
                 if (typeof valA === 'string' && valA.endsWith('%')) valA = parseFloat(valA);
                 if (typeof valB === 'string' && valB.endsWith('%')) valB = parseFloat(valB);
@@ -515,7 +515,6 @@
                 document.getElementById('chart2Title').innerText = "Shots & CORSI metrics";
                 document.getElementById('chart3Title').innerText = "Top Game Score / 60";
 
-                // 1. Kaavio: Järjestetään maalien mukaan (Top 10)
                 const sortedByGoals = [...currentFilteredData].sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0)).slice(0, 10);
                 const labels1 = sortedByGoals.map(d => d['Player']);
                 
@@ -539,7 +538,6 @@
                     }
                 });
 
-                // 2. Kaavio: Järjestetään Corsin mukaan (Top 10)
                 const sortedByCorsi = [...currentFilteredData].sort((a, b) => (Number(b['CORSI']) || 0) - (Number(a['CORSI']) || 0)).slice(0, 10);
                 const labels2 = sortedByCorsi.map(d => d['Player']);
 
@@ -560,7 +558,6 @@
                     }
                 });
 
-                // 3. Kaavio: Järjestetään Game Score / 60 mukaan (Top 10)
                 const sortedByGS60 = [...currentFilteredData].sort((a, b) => (Number(b['Game Score / 60']) || 0) - (Number(a['Game Score / 60']) || 0)).slice(0, 10);
                 const labels3 = sortedByGS60.map(d => d['Player']);
 
