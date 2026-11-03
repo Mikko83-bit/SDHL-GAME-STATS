@@ -35,14 +35,14 @@
             </div>
             
             <div class="flex flex-wrap items-center gap-3">
-                <div>
+                <div id="gameFilterContainer">
                     <label class="block text-[10px] text-red-200 uppercase font-bold">Select View / Game</label>
                     <select id="gameFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
                         <option value="all">All Games Total (Season Stats)</option>
                     </select>
                 </div>
 
-                <div>
+                <div id="teamFilterContainer">
                     <label class="block text-[10px] text-red-200 uppercase font-bold">Filter Team</label>
                     <select id="teamFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
                         <option value="all">All Teams</option>
@@ -55,6 +55,13 @@
                 </div>
             </div>
         </div>
+
+        <!-- Välilehdet (Tabs) -->
+        <div class="max-w-7xl mx-auto px-4 flex gap-2 border-t border-red-900/50 pt-2 pb-1">
+            <button onclick="switchTab('players')" id="tabPlayers" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-red-900 text-white transition">Player Stats</button>
+            <button onclick="switchTab('faceoffs')" id="tabFaceoffs" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition">Faceoffs</button>
+            <button onclick="switchTab('teams')" id="tabTeams" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition">Team Stats</button>
+        </div>
     </header>
 
     <!-- Main Content -->
@@ -65,7 +72,7 @@
             <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
                 <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Player Statistics (All Games Total)</h2>
                 <div class="flex gap-2">
-                    <input type="text" id="playerSearch" placeholder="Search player..." class="bg-slate-950 border border-slate-700 text-xs text-white rounded px-3 py-1 focus:outline-none focus:border-red-500">
+                    <input type="text" id="playerSearch" placeholder="Search..." class="bg-slate-950 border border-slate-700 text-xs text-white rounded px-3 py-1 focus:outline-none focus:border-red-500">
                     <button onclick="copyTable()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">Copy</button>
                     <button onclick="exportCSV()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">CSV</button>
                 </div>
@@ -79,8 +86,8 @@
             </div>
         </div>
 
-        <!-- Charts / Comparisons -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Charts / Comparisons (Näkyy vain Pelaajatilastot-välilehdellä) -->
+        <div id="chartsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
                 <h3 id="chart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals vs Expected Goals (xG)</h3>
                 <div class="relative h-72">
@@ -126,7 +133,12 @@
     </div>
 
     <script>
-        let rawData = [];
+        let workbookData = {
+            playersRaw: [],
+            faceoffsRaw: [],
+            teamsRaw: []
+        };
+        let currentTab = 'players';
         let currentFilteredData = [];
         let currentSortColumn = null;
         let isAscending = false;
@@ -188,7 +200,6 @@
             const ordered = {};
             const keys = Object.keys(row);
 
-            // Asetetaan haluttu järjestys alkuun (Team, Shirt number, Player, Position, Games, Game Score, Game Score / 60)
             ['Team', 'Shirt number', 'Player', 'Position', 'Games', 'Time on ice', 'All shifts', 'Game Score', 'Game Score / 60'].forEach(k => {
                 if (row[k] !== undefined) ordered[k] = row[k];
             });
@@ -225,38 +236,80 @@
         function processExcelData(arrayBuffer) {
             const data = new Uint8Array(arrayBuffer);
             const workbook = XLSX.read(data, { type: 'array' });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
             
-            let tempRaw = XLSX.utils.sheet_to_json(worksheet, { defval: "-" });
-            
-            rawData = tempRaw.map(row => {
-                if (row['Date']) {
-                    row['Date'] = formatExcelDate(row['Date']);
-                }
-                // Yksittäisessä pelissä Games on aina 1 (jos pelaaja on pelannut)
-                row['Games'] = 1;
+            // 1. SDHL Game Score (Players)
+            if (workbook.Sheets['SDHL GAME SCORE']) {
+                let tempRaw = XLSX.utils.sheet_to_json(workbook.Sheets['SDHL GAME SCORE'], { defval: "-" });
+                workbookData.playersRaw = tempRaw.map(row => {
+                    if (row['Date']) row['Date'] = formatExcelDate(row['Date']);
+                    row['Games'] = 1;
+                    const gs = calculateGameScore(row);
+                    row['Game Score'] = Number(gs.toFixed(2));
+                    const toiSecs = timeToSecs(row['Time on ice']);
+                    const gsPer60 = toiSecs > 0 ? (gs / (toiSecs / 3600)) : 0;
+                    row['Game Score / 60'] = Number(gsPer60.toFixed(2));
+                    return reorderRowKeys(row);
+                });
+            }
 
-                const gs = calculateGameScore(row);
-                row['Game Score'] = Number(gs.toFixed(2));
-                
-                const toiSecs = timeToSecs(row['Time on ice']);
-                const gsPer60 = toiSecs > 0 ? (gs / (toiSecs / 3600)) : 0;
-                row['Game Score / 60'] = Number(gsPer60.toFixed(2));
+            // 2. Faceoffs
+            if (workbook.Sheets['Faceoffs']) {
+                workbookData.faceoffsRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Faceoffs'], { defval: "-" });
+            }
 
-                return reorderRowKeys(row);
-            });
+            // 3. Teams SDHL
+            if (workbook.Sheets['Teams SDHL']) {
+                workbookData.teamsRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Teams SDHL'], { defval: "-" });
+            }
             
             populateGameFilter();
             populateTeamFilter();
-            filterData();
+            switchTab('players');
+        }
+
+        function switchTab(tabName) {
+            currentTab = tabName;
+            
+            // Päivitä nappien tyylit
+            document.getElementById('tabPlayers').className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition ${tabName === 'players' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+            document.getElementById('tabFaceoffs').className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition ${tabName === 'faceoffs' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+            document.getElementById('tabTeams').className = `px-4 py-1.5 text-xs font-bold uppercase rounded transition ${tabName === 'teams' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+
+            // Näytä/piilota suodattimet ja kaaviot tarpeen mukaan
+            document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
+            document.getElementById('teamFilterContainer').style.display = (tabName === 'teams') ? 'none' : 'block';
+            document.getElementById('chartsContainer').style.display = (tabName === 'players') ? 'grid' : 'none';
+
+            currentSortColumn = null;
+            renderCurrentView();
+        }
+
+        function renderCurrentView() {
+            const selectedTeam = document.getElementById('teamFilter').value;
+
+            if (currentTab === 'players') {
+                filterData();
+            } else if (currentTab === 'faceoffs') {
+                document.getElementById('tableTitle').innerText = "Faceoffs Statistics";
+                let data = [...workbookData.faceoffsRaw];
+                if (selectedTeam !== 'all') {
+                    data = data.filter(row => String(row['Team']) === selectedTeam);
+                }
+                currentFilteredData = data;
+                renderTable();
+            } else if (currentTab === 'teams') {
+                document.getElementById('tableTitle').innerText = "Teams SDHL Statistics";
+                let data = [...workbookData.teamsRaw];
+                currentFilteredData = data;
+                renderTable();
+            }
         }
 
         function populateGameFilter() {
             const select = document.getElementById('gameFilter');
             const gamesSet = new Set();
             
-            rawData.forEach(row => {
+            workbookData.playersRaw.forEach(row => {
                 const date = row['Date'] || '';
                 const opponent = row['Opponent'] || '';
                 const team = row['Team'] || '';
@@ -267,7 +320,6 @@
             });
 
             const gamesArray = Array.from(gamesSet).sort();
-
             select.innerHTML = '<option value="all">All Games Total (Season Stats)</option>';
             gamesArray.forEach(gameStr => {
                 const [date, matchTeams] = gameStr.split('___');
@@ -277,14 +329,14 @@
             select.removeEventListener('change', filterData);
             select.addEventListener('change', filterData);
             document.getElementById('playerSearch').addEventListener('input', renderTable);
-            document.getElementById('teamFilter').addEventListener('change', filterData);
+            document.getElementById('teamFilter').addEventListener('change', renderCurrentView);
         }
 
         function populateTeamFilter() {
             const teamSelect = document.getElementById('teamFilter');
             const teamsSet = new Set();
 
-            rawData.forEach(row => {
+            workbookData.playersRaw.forEach(row => {
                 const team = row['Team'];
                 if (team && team !== '-') teamsSet.add(team);
             });
@@ -308,7 +360,7 @@
                 const toiSeconds = {};
                 const totalGs = {};
 
-                rawData.forEach(row => {
+                workbookData.playersRaw.forEach(row => {
                     const player = row['Player'];
                     if (!player || player === '-') return;
 
@@ -319,7 +371,7 @@
                         delete aggregated[player]['Opponent'];
                         delete aggregated[player]['Game ID'];
 
-                        counts[player] = 1; // Laskee pelatut ottelut
+                        counts[player] = 1;
                         toiSeconds[player] = timeToSecs(row['Time on ice']);
                         totalGs[player] = row['Game Score'] || 0;
 
@@ -388,7 +440,7 @@
                 const [date, matchTeams] = selectedGame.split('___');
                 const [teamA, teamB] = matchTeams.split(' vs ');
                 
-                baseData = rawData.filter(row => {
+                baseData = workbookData.playersRaw.filter(row => {
                     if (String(row['Date']) !== date) return false;
                     const t = row['Team'];
                     const o = row['Opponent'];
@@ -447,7 +499,7 @@
 
             const searchTerm = document.getElementById('playerSearch').value.toLowerCase();
             const filtered = currentFilteredData.filter(row => {
-                const name = String(row['Player'] || '').toLowerCase();
+                const name = String(row['Player'] || row['Team'] || '').toLowerCase();
                 const pos = String(row['Position'] || '').toLowerCase();
                 const team = String(row['Team'] || '').toLowerCase();
                 return name.includes(searchTerm) || pos.includes(searchTerm) || team.includes(searchTerm);
@@ -458,9 +510,17 @@
             const headerTr = document.getElementById('tableHeader');
             headerTr.innerHTML = headers.map((h, index) => {
                 let stickyClass = '';
-                if (h === 'Team') stickyClass = 'sticky-col-team';
-                else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
-                else if (h === 'Player') stickyClass = 'sticky-col-player';
+                if (currentTab === 'players') {
+                    if (h === 'Team') stickyClass = 'sticky-col-team';
+                    else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
+                    else if (h === 'Player') stickyClass = 'sticky-col-player';
+                } else if (currentTab === 'faceoffs') {
+                    if (h === 'Team') stickyClass = 'sticky-col-team';
+                    else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
+                    else if (h === 'Player') stickyClass = 'sticky-col-player';
+                } else if (currentTab === 'teams') {
+                    if (h === 'Team') stickyClass = 'sticky-col-team';
+                }
                 return `<th class="px-3 py-2 cursor-pointer hover:text-white underline ${stickyClass}" onclick="sortTable('${h}')">${h} ${currentSortColumn === h ? (isAscending ? '▲' : '▼') : ''}</th>`;
             }).join('');
 
@@ -474,11 +534,15 @@
                             val = val.toFixed(2);
                         }
                         let stickyClass = '';
-                        if (h === 'Team') stickyClass = 'sticky-col-team';
-                        else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
-                        else if (h === 'Player') {
-                            stickyClass = 'sticky-col-player';
-                            return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline ${stickyClass}" onclick="openPlayerModal('${playerName}')">${val}</td>`;
+                        if (currentTab === 'players' || currentTab === 'faceoffs') {
+                            if (h === 'Team') stickyClass = 'sticky-col-team';
+                            else if (h === 'Shirt number') stickyClass = 'sticky-col-shirt';
+                            else if (h === 'Player') {
+                                stickyClass = 'sticky-col-player';
+                                return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline ${stickyClass}" onclick="openPlayerModal('${playerName}')">${val}</td>`;
+                            }
+                        } else if (currentTab === 'teams') {
+                            if (h === 'Team') stickyClass = 'sticky-col-team text-red-400 font-bold';
                         }
                         return `<td class="px-3 py-2 text-slate-300 ${stickyClass}">${val}</td>`;
                     }).join('') +
@@ -488,7 +552,7 @@
 
         function openPlayerModal(playerName) {
             document.getElementById('modalPlayerName').innerText = `Player: ${playerName}`;
-            const playerGames = rawData.filter(row => row['Player'] === playerName);
+            const playerGames = workbookData.playersRaw.filter(row => row['Player'] === playerName);
 
             if (playerGames.length === 0) return;
 
@@ -696,7 +760,7 @@
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "sdhl_stats.csv");
+            link.setAttribute("download", `sdhl_${currentTab}_stats.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
