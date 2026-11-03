@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Chart.js for graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Chart.js Data Labels Plugin for displaying values on top of bars -->
+    <!-- Chart.js Data Labels Plugin -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
@@ -510,43 +510,23 @@
             if (chart2Instance) chart2Instance.destroy();
             if (chart3Instance) chart3Instance.destroy();
 
-            // Yhteinen plugin-asetus lukujen näyttämiseen pylväiden päällä
-            const datalabelsPlugin = {
-                plugins: [ChartDataLabels],
-                options: {
-                    plugins: {
-                        datalabels: {
-                            anchor: 'end',
-                            align: 'top',
-                            color: '#cbd5e1',
-                            font: { size: 10, weight: 'bold' },
-                            formatter: function(value) {
-                                return value !== 0 ? value : '';
-                            }
-                        }
-                    }
-                }
-            };
-
             if (selectedGame === 'all') {
                 document.getElementById('chart1Title').innerText = "Goals vs Expected Goals (xG)";
                 document.getElementById('chart2Title').innerText = "Shots & CORSI metrics";
                 document.getElementById('chart3Title').innerText = "Top Game Score / 60";
 
+                // 1. Kaavio: Järjestetään maalien mukaan (Top 10)
                 const sortedByGoals = [...currentFilteredData].sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0)).slice(0, 10);
-                const sortedByGS60 = [...currentFilteredData].sort((a, b) => (Number(b['Game Score / 60']) || 0) - (Number(a['Game Score / 60']) || 0)).slice(0, 10);
-                
-                const labels = sortedByGoals.map(d => d['Player']);
-                const gsLabels = sortedByGS60.map(d => d['Player']);
+                const labels1 = sortedByGoals.map(d => d['Player']);
                 
                 chart1Instance = new Chart(document.getElementById('chart1').getContext('2d'), {
                     type: 'bar',
                     plugins: [ChartDataLabels],
                     data: {
-                        labels: labels,
+                        labels: labels1,
                         datasets: [
                             { label: 'Goals', data: sortedByGoals.map(d => Number(d['Goals']) || 0), backgroundColor: '#ef4444' },
-                            { label: 'xG', data: sortedByGoals.map(d => Number(d['xG (Expected goals)'] || d['xG']) || 0), backgroundColor: '#3b82f6' }
+                            { label: 'xG', data: sortedByGoals.map(d => Number(Number(d['xG (Expected goals)'] || d['xG'] || 0).toFixed(2))), backgroundColor: '#3b82f6' }
                         ]
                     },
                     options: {
@@ -559,12 +539,16 @@
                     }
                 });
 
+                // 2. Kaavio: Järjestetään Corsin mukaan (Top 10)
+                const sortedByCorsi = [...currentFilteredData].sort((a, b) => (Number(b['CORSI']) || 0) - (Number(a['CORSI']) || 0)).slice(0, 10);
+                const labels2 = sortedByCorsi.map(d => d['Player']);
+
                 chart2Instance = new Chart(document.getElementById('chart2').getContext('2d'), {
                     type: 'bar',
                     plugins: [ChartDataLabels],
                     data: {
-                        labels: labels,
-                        datasets: [{ label: 'CORSI', data: sortedByGoals.map(d => Number(d['CORSI']) || 0), backgroundColor: '#10b981' }]
+                        labels: labels2,
+                        datasets: [{ label: 'CORSI', data: sortedByCorsi.map(d => Number(d['CORSI']) || 0), backgroundColor: '#10b981' }]
                     },
                     options: {
                         responsive: true, maintainAspectRatio: false,
@@ -576,11 +560,15 @@
                     }
                 });
 
+                // 3. Kaavio: Järjestetään Game Score / 60 mukaan (Top 10)
+                const sortedByGS60 = [...currentFilteredData].sort((a, b) => (Number(b['Game Score / 60']) || 0) - (Number(a['Game Score / 60']) || 0)).slice(0, 10);
+                const labels3 = sortedByGS60.map(d => d['Player']);
+
                 chart3Instance = new Chart(document.getElementById('chart3').getContext('2d'), {
                     type: 'bar',
                     plugins: [ChartDataLabels],
                     data: {
-                        labels: gsLabels,
+                        labels: labels3,
                         datasets: [{ label: 'Game Score / 60', data: sortedByGS60.map(d => Number(d['Game Score / 60']) || 0), backgroundColor: '#f59e0b' }]
                     },
                     options: {
