@@ -108,7 +108,7 @@
             </div>
         </div>
 
-        <!-- Team Charts Container (Näkyy vain Team Stats -välilehdellä) -->
+        <!-- Team Charts Container (Team Stats) -->
         <div id="teamChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
                 <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Goals vs Expected Goals (xG)</h3>
@@ -163,6 +163,16 @@
         let chart3Instance = null;
         let teamChart1Instance = null;
         let teamChart2Instance = null;
+
+        // Apufunktio joukkueen nimen normalisointiin (esim. MODO -> Modo, Lulea/MSSK -> Lulea)
+        function normalizeTeamName(name) {
+            if (!name) return '-';
+            const clean = String(name).trim();
+            const upper = clean.toUpperCase();
+            if (upper.includes('MODO')) return 'Modo';
+            if (upper.includes('LULEA')) return 'Lulea';
+            return clean;
+        }
 
         function formatExcelDate(serial) {
             if (!serial) return '-';
@@ -255,10 +265,13 @@
             const data = new Uint8Array(arrayBuffer);
             const workbook = XLSX.read(data, { type: 'array' });
             
+            // 1. SDHL Game Score (Players)
             if (workbook.Sheets['SDHL GAME SCORE']) {
                 let tempRaw = XLSX.utils.sheet_to_json(workbook.Sheets['SDHL GAME SCORE'], { defval: "-" });
                 workbookData.playersRaw = tempRaw.map(row => {
                     if (row['Date']) row['Date'] = formatExcelDate(row['Date']);
+                    if (row['Team']) row['Team'] = normalizeTeamName(row['Team']);
+                    if (row['Opponent']) row['Opponent'] = normalizeTeamName(row['Opponent']);
                     row['Games'] = 1;
                     const gs = calculateGameScore(row);
                     row['Game Score'] = Number(gs.toFixed(2));
@@ -269,12 +282,22 @@
                 });
             }
 
+            // 2. Faceoffs
             if (workbook.Sheets['Faceoffs']) {
-                workbookData.faceoffsRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Faceoffs'], { defval: "-" });
+                let tempFaceoffs = XLSX.utils.sheet_to_json(workbook.Sheets['Faceoffs'], { defval: "-" });
+                workbookData.faceoffsRaw = tempFaceoffs.map(row => {
+                    if (row['Team']) row['Team'] = normalizeTeamName(row['Team']);
+                    return row;
+                });
             }
 
+            // 3. Teams SDHL
             if (workbook.Sheets['Teams SDHL']) {
-                workbookData.teamsRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Teams SDHL'], { defval: "-" });
+                let tempTeams = XLSX.utils.sheet_to_json(workbook.Sheets['Teams SDHL'], { defval: "-" });
+                workbookData.teamsRaw = tempTeams.map(row => {
+                    if (row['Team']) row['Team'] = normalizeTeamName(row['Team']);
+                    return row;
+                });
             }
             
             populateGameFilter();
@@ -753,17 +776,14 @@
             if (teamChart2Instance) teamChart2Instance.destroy();
 
             const teamsData = [...workbookData.teamsRaw];
-            // Järjestetään tehtyjen maalien mukaan
             teamsData.sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0));
 
             const labels = teamsData.map(d => d['Team']);
             const goals = teamsData.map(d => Number(d['Goals']) || 0);
             
-            // Etsitään oikea xG-sarake
             const xgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('xgn') || k.toLowerCase().includes('expected goals')) || 'xG (Expected goals)';
             const xg = teamsData.map(d => Number(Number(d[xgKey] || 0).toFixed(2)));
 
-            // Etsitään Net xG -sarake
             const netXgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('net xg')) || "Net xG (xG - Opponent's xG)";
             const netXg = teamsData.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
 
@@ -790,7 +810,6 @@
                 }
             });
 
-            // Järjestetään Net xG mukaan toiseen kaavioon
             const sortedByNetXg = [...teamsData].sort((a, b) => (Number(b[netXgKey]) || 0) - (Number(a[netXgKey]) || 0));
             const netLabels = sortedByNetXg.map(d => d['Team']);
             const netValues = sortedByNetXg.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
