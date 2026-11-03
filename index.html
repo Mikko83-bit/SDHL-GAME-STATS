@@ -73,7 +73,14 @@
         <!-- Standard Table Container -->
         <div id="tableSection" class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden mb-8">
             <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
-                <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Player Statistics (All Games Total)</h2>
+                <div class="flex items-center gap-4">
+                    <h2 id="tableTitle" class="font-bold text-sm text-red-400 uppercase tracking-wide">Player Statistics (All Games Total)</h2>
+                    <!-- Alavalikko Scoring Chances sisällä (Pelaajat vs Pelitavat) -->
+                    <div id="chancesSubMenu" style="display: none;" class="flex gap-1 bg-slate-950 p-1 rounded border border-slate-800">
+                        <button onclick="switchChancesSub('players')" id="subBtnPlayers" class="px-3 py-1 text-[11px] font-bold uppercase rounded bg-red-900 text-white transition">Pelaajat</button>
+                        <button onclick="switchChancesSub('team')" id="subBtnTeam" class="px-3 py-1 text-[11px] font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition">Pelitavat (Team)</button>
+                    </div>
+                </div>
                 <div class="flex gap-2">
                     <input type="text" id="playerSearch" placeholder="Search..." class="bg-slate-950 border border-slate-700 text-xs text-white rounded px-3 py-1 focus:outline-none focus:border-red-500">
                     <button onclick="copyTable()" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1 rounded border border-slate-700 text-slate-300 transition">Copy</button>
@@ -190,16 +197,16 @@
             </div>
         </div>
 
-        <!-- Scoring Chances Charts Container -->
+        <!-- Scoring Chances Charts Container (For vs Against vierekkäin) -->
         <div id="chancesChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chanceChart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Top Scoring Chances For</h3>
+                <h3 id="chanceChart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalipaikat: For vs Against</h3>
                 <div class="relative h-80">
                     <canvas id="chanceChart1"></canvas>
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Pelitapatilastot / Descriptors</h3>
+                <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalit: For vs Against</h3>
                 <div class="relative h-80">
                     <canvas id="chanceChart2"></canvas>
                 </div>
@@ -242,6 +249,7 @@
             chancesTeamRaw: []
         };
         let currentTab = 'players';
+        let chancesSub = 'players'; // 'players' tai 'team'
         let currentFilteredData = [];
         let currentSortColumn = null;
         let isAscending = false;
@@ -331,7 +339,6 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
-            // Ladataan pääpeli-excel
             try {
                 const response = await fetch('Sdhl Game score 2026-2027.xlsx');
                 if (response.ok) {
@@ -342,7 +349,6 @@
                 console.log('Main excel load manual.');
             }
 
-            // Ladataan scoring chances -excel
             try {
                 const response2 = await fetch('SDHL 2026-2027 scoring chances.xlsx');
                 if (response2.ok) {
@@ -529,8 +535,15 @@
                 if (!num) return;
 
                 if (!aggregated[num]) {
+                    // Yritetään etsiä pelaajan nimi päädatasta pelinumeron perusteella
+                    const foundPlayer = workbookData.playersRaw.find(p => String(p['Shirt number']) === String(num));
+                    const playerName = foundPlayer ? foundPlayer['Player'] : `Pelaaja #${num}`;
+                    const playerTeam = foundPlayer ? foundPlayer['Team'] : '-';
+
                     aggregated[num] = {
-                        'Player Number': num,
+                        'Team': playerTeam,
+                        'Shirt number': num,
+                        'Player': playerName,
                         'Goal For': 0,
                         'Chance For': 0,
                         'PP Goal': 0,
@@ -607,6 +620,7 @@
 
             document.getElementById('tableSection').style.display = (tabName === 'compare') ? 'none' : 'block';
             document.getElementById('comparisonSection').style.display = (tabName === 'compare') ? 'block' : 'none';
+            document.getElementById('chancesSubMenu').style.display = (tabName === 'chances') ? 'flex' : 'none';
 
             document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
             document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare' || tabName === 'chances') ? 'none' : 'block';
@@ -616,6 +630,13 @@
             document.getElementById('chancesChartsContainer').style.display = (tabName === 'chances') ? 'grid' : 'none';
 
             currentSortColumn = null;
+            renderCurrentView();
+        }
+
+        function switchChancesSub(sub) {
+            chancesSub = sub;
+            document.getElementById('subBtnPlayers').className = `px-3 py-1 text-[11px] font-bold uppercase rounded transition ${sub === 'players' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+            document.getElementById('subBtnTeam').className = `px-3 py-1 text-[11px] font-bold uppercase rounded transition ${sub === 'team' ? 'bg-red-900 text-white' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
             renderCurrentView();
         }
 
@@ -648,23 +669,28 @@
                 currentFilteredData = data;
                 renderTable();
             } else if (currentTab === 'chances') {
-                document.getElementById('tableTitle').innerText = "Scoring Chances & Play Styles (Team Descriptors)";
-                
-                const descMap = {};
-                workbookData.chancesTeamRaw.forEach(row => {
-                    const desc = row['Descriptor'] || 'Muu';
-                    if (!descMap[desc]) {
-                        descMap[desc] = { 'Pelitapa / Tilanne': desc, 'Goal For': 0, 'Chance For': 0, 'Goal Against': 0, 'Chance Against': 0 };
-                    }
-                    descMap[desc]['Goal For'] += Number(row['Goal For']) || 0;
-                    descMap[desc]['Chance For'] += Number(row['Chance For']) || 0;
-                    descMap[desc]['Goal Against'] += Number(row['Goal Against']) || 0;
-                    descMap[desc]['Chance Against'] += Number(row['Chance Against']) || 0;
-                });
-
-                currentFilteredData = Object.values(descMap);
-                renderTable();
-                renderChancesCharts();
+                if (chancesSub === 'players') {
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Pelaajien tilastot (For vs Against)";
+                    currentFilteredData = [...workbookData.chancesPlayersAggregated];
+                    renderTable();
+                    renderChancesPlayerCharts();
+                } else {
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Pelitavat (Team Descriptors)";
+                    const descMap = {};
+                    workbookData.chancesTeamRaw.forEach(row => {
+                        const desc = row['Descriptor'] || 'Muu';
+                        if (!descMap[desc]) {
+                            descMap[desc] = { 'Pelitapa / Tilanne': desc, 'Goal For': 0, 'Chance For': 0, 'Goal Against': 0, 'Chance Against': 0 };
+                        }
+                        descMap[desc]['Goal For'] += Number(row['Goal For']) || 0;
+                        descMap[desc]['Chance For'] += Number(row['Chance For']) || 0;
+                        descMap[desc]['Goal Against'] += Number(row['Goal Against']) || 0;
+                        descMap[desc]['Chance Against'] += Number(row['Chance Against']) || 0;
+                    });
+                    currentFilteredData = Object.values(descMap);
+                    renderTable();
+                    renderChancesTeamCharts();
+                }
             }
         }
 
@@ -1182,28 +1208,25 @@
             });
         }
 
-        function renderChancesCharts() {
+        function renderChancesPlayerCharts() {
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            const descMap = {};
-            workbookData.chancesTeamRaw.forEach(row => {
-                const desc = row['Descriptor'] || 'Muu';
-                if (!descMap[desc]) descMap[desc] = { desc, chanceFor: 0, chanceAgainst: 0 };
-                descMap[desc].chanceFor += Number(row['Chance For']) || 0;
-                descMap[desc].chanceAgainst += Number(row['Chance Against']) || 0;
-            });
+            document.getElementById('chanceChart1Title').innerText = "Pelaajat: Maalipaikat (Chance For vs Against)";
+            document.getElementById('chanceChart2Title').innerText = "Pelaajat: Maalit (Goal For vs Against)";
 
-            const arr = Object.values(descMap);
-            const topFor = [...arr].sort((a, b) => b.chanceFor - a.chanceFor).slice(0, 10);
-            const topAgainst = [...arr].sort((a, b) => b.chanceAgainst - a.chanceAgainst).slice(0, 10);
+            const sorted = [...workbookData.chancesPlayersAggregated].sort((a, b) => b['Chance For'] - a['Chance For']).slice(0, 10);
+            const labels = sorted.map(d => d['Player']);
 
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: topFor.map(d => d.desc),
-                    datasets: [{ label: 'Chance For', data: topFor.map(d => d.chanceFor), backgroundColor: '#3b82f6' }]
+                    labels: labels,
+                    datasets: [
+                        { label: 'Chance For', data: sorted.map(d => d['Chance For']), backgroundColor: '#3b82f6' },
+                        { label: 'Chance Against', data: sorted.map(d => d['Chance Against']), backgroundColor: '#ef4444' }
+                    ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
@@ -1215,12 +1238,81 @@
                 }
             });
 
+            const sortedGoals = [...workbookData.chancesPlayersAggregated].sort((a, b) => b['Goal For'] - a['Goal For']).slice(0, 10);
+            const labelsGoals = sortedGoals.map(d => d['Player']);
+
             chanceChart2Instance = new Chart(document.getElementById('chanceChart2').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: topAgainst.map(d => d.desc),
-                    datasets: [{ label: 'Chance Against', data: topAgainst.map(d => d.chanceAgainst), backgroundColor: '#ef4444' }]
+                    labels: labelsGoals,
+                    datasets: [
+                        { label: 'Goal For', data: sortedGoals.map(d => d['Goal For']), backgroundColor: '#10b981' },
+                        { label: 'Goal Against', data: sortedGoals.map(d => d['Goal Against']), backgroundColor: '#f59e0b' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                    },
+                    scales: { x: { ticks: { color: '#94a3b8', font: { size: 9, maxRotation: 45, minRotation: 45 } } }, y: { ticks: { color: '#94a3b8' } } }
+                }
+            });
+        }
+
+        function renderChancesTeamCharts() {
+            if (chanceChart1Instance) chanceChart1Instance.destroy();
+            if (chanceChart2Instance) chanceChart2Instance.destroy();
+
+            document.getElementById('chanceChart1Title').innerText = "Pelitavat: Maalipaikat (Chance For vs Against)";
+            document.getElementById('chanceChart2Title').innerText = "Pelitavat: Maalit (Goal For vs Against)";
+
+            const descMap = {};
+            workbookData.chancesTeamRaw.forEach(row => {
+                const desc = row['Descriptor'] || 'Muu';
+                if (!descMap[desc]) descMap[desc] = { desc, chanceFor: 0, chanceAgainst: 0, goalFor: 0, goalAgainst: 0 };
+                descMap[desc].chanceFor += Number(row['Chance For']) || 0;
+                descMap[desc].chanceAgainst += Number(row['Chance Against']) || 0;
+                descMap[desc].goalFor += Number(row['Goal For']) || 0;
+                descMap[desc].goalAgainst += Number(row['Goal Against']) || 0;
+            });
+
+            const arr = Object.values(descMap);
+            const topFor = [...arr].sort((a, b) => b.chanceFor - a.chanceFor).slice(0, 10);
+
+            chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: topFor.map(d => d.desc),
+                    datasets: [
+                        { label: 'Chance For', data: topFor.map(d => d.chanceFor), backgroundColor: '#3b82f6' },
+                        { label: 'Chance Against', data: topFor.map(d => d.chanceAgainst), backgroundColor: '#ef4444' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                    },
+                    scales: { x: { ticks: { color: '#94a3b8', font: { size: 9, maxRotation: 45, minRotation: 45 } } }, y: { ticks: { color: '#94a3b8' } } }
+                }
+            });
+
+            const topGoals = [...arr].sort((a, b) => b.goalFor - a.goalFor).slice(0, 10);
+
+            chanceChart2Instance = new Chart(document.getElementById('chanceChart2').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: topGoals.map(d => d.desc),
+                    datasets: [
+                        { label: 'Goal For', data: topGoals.map(d => d.goalFor), backgroundColor: '#10b981' },
+                        { label: 'Goal Against', data: topGoals.map(d => d.goalAgainst), backgroundColor: '#f59e0b' }
+                    ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
@@ -1248,7 +1340,7 @@
         function exportCSV() {
             if (currentFilteredData.length === 0) return;
             const headers = Object.keys(currentFilteredData[0]);
-            let csvContent = "data:text/csv;charset=utf-8," + headers.json(",") + "\n"; // korjattu
+            let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
             currentFilteredData.forEach(row => {
                 csvContent += headers.map(h => `"${row[h] !== undefined ? row[h] : ''}"`).join(",") + "\n";
             });
