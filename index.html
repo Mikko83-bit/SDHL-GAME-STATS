@@ -103,6 +103,13 @@
                 </select>
                 <p class="text-[9px] text-slate-400 mt-0.5">Pidä Ctrl / Cmd pohjassa valitaksesi useita.</p>
             </div>
+
+            <div>
+                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Peli / Pelit (Monivalinta)</label>
+                <select id="filterChancesGamesMulti" multiple class="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-1.5 h-20 focus:outline-none custom-scrollbar">
+                </select>
+                <p class="text-[9px] text-slate-400 mt-0.5">Tyhjä = Kaikki pelit yhteensä.</p>
+            </div>
         </div>
 
         <!-- Charts / Comparisons (Player Stats) -->
@@ -432,7 +439,7 @@
                 workbookData.playersRaw = tempRaw.map(row => {
                     if (row['Date']) row['Date'] = formatExcelDate(row['Date']);
                     if (row['Team']) row['Team'] = normalizeTeamName(row['Team']);
-                    if (row['Opponent']) row['Opponent'] = normalizeTeamName(row['Opponent']);
+                    if (row['Opponent']) row['Opponent'] = normalizeTeamName(row['Team']);
                     row['Games'] = 1;
                     const gs = calculateGameScore(row);
                     row['Game Score'] = Number(gs.toFixed(2));
@@ -471,7 +478,7 @@
             populateTeamFilter();
             buildAggregatedPlayers();
             setupCompareFilters();
-            buildChancesPlayersMap();
+            buildChancesData();
             switchTab(currentTab);
         }
 
@@ -481,13 +488,13 @@
 
             if (workbook.Sheets['Players']) {
                 workbookData.chancesPlayersRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Players'], { defval: 0 });
-                buildChancesPlayersMap();
             }
 
             if (workbook.Sheets['Team']) {
                 workbookData.chancesTeamRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Team'], { defval: 0 });
             }
 
+            buildChancesData();
             if (currentTab === 'chances') {
                 renderCurrentView();
             }
@@ -576,7 +583,7 @@
             workbookData.playersAggregated = Object.values(aggregated);
         }
 
-        function buildChancesPlayersMap() {
+        function buildChancesData() {
             if (workbookData.chancesPlayersRaw.length === 0) return;
 
             const numToPlayer = {};
@@ -584,8 +591,33 @@
                 numToPlayer[String(p['Shirt number']).trim()] = p['Player'];
             });
 
-            const aggregated = {};
+            // Kerätään uniikit pelit chances-datasta
+            const gamesSet = new Set();
             workbookData.chancesPlayersRaw.forEach(row => {
+                if (row['Game']) gamesSet.add(String(row['Game']));
+            });
+            const gamesArray = Array.from(gamesSet).sort((a,b) => Number(a)-Number(b));
+            
+            const selectGame = document.getElementById('filterChancesGamesMulti');
+            if (selectGame) {
+                const curSelected = Array.from(selectGame.selectedOptions).map(o => o.value);
+                selectGame.innerHTML = gamesArray.map(g => `<option value="${g}">Peli ${g}</option>`).join('');
+                Array.from(selectGame.options).forEach(opt => {
+                    if (curSelected.includes(opt.value)) opt.selected = true;
+                });
+                selectGame.removeEventListener('change', renderCurrentView);
+                selectGame.addEventListener('change', renderCurrentView);
+            }
+
+            const selectedGames = selectGame ? Array.from(selectGame.selectedOptions).map(o => o.value) : [];
+
+            let rawFiltered = workbookData.chancesPlayersRaw;
+            if (selectedGames.length > 0) {
+                rawFiltered = rawFiltered.filter(row => selectedGames.includes(String(row['Game'])));
+            }
+
+            const aggregated = {};
+            rawFiltered.forEach(row => {
                 const num = String(row['Number']).trim();
                 if (!num || num === '0') return;
 
@@ -623,7 +655,6 @@
                 aggregated[playerName]['PP chance ag'] += Number(row['PP chance ag']) || 0;
             });
 
-            // Lasketaan 5v5 Net Score kaavalla: (Goal For + Goal For inv + Chance For + Chance For inv) - (Goal Against + Chance Against)
             Object.values(aggregated).forEach(row => {
                 const forSum = row['Goal For'] + row['Goal For inv'] + row['Chance For'] + row['Chance For inv'];
                 const againstSum = row['Goal Against'] + row['Chance Against'];
@@ -636,8 +667,12 @@
 
         function populatePlayersFilter() {
             const select = document.getElementById('filterPlayersMulti');
+            const curSelected = Array.from(select.selectedOptions).map(o => o.value);
             const players = workbookData.chancesPlayersAggregated.map(p => p['Name']).sort();
             select.innerHTML = players.map(p => `<option value="${p}">${p}</option>`).join('');
+            Array.from(select.options).forEach(opt => {
+                if (curSelected.includes(opt.value)) opt.selected = true;
+            });
             select.removeEventListener('change', renderCurrentView);
             select.addEventListener('change', renderCurrentView);
         }
@@ -753,6 +788,7 @@
                 currentFilteredData = data;
                 renderTable();
             } else if (currentTab === 'chances') {
+                buildChancesData(); // Päivitetään pelifiltterin mukaan
                 if (chancesSub === 'players') {
                     document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Pelaajien tilastot (5v5 Net Score)";
                     const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
@@ -767,9 +803,15 @@
                     document.getElementById('tableTitle').innerText = "Scoring Chances: Alueet ja Pelitavat (OZ, Rush, Turnovers, Takeaways, PP...)";
                     
                     const selectedCategories = Array.from(document.getElementById('filterCategoryMulti').selectedOptions).map(opt => opt.value);
+                    const selectedGames = Array.from(document.getElementById('filterChancesGamesMulti').selectedOptions).map(opt => opt.value);
+
+                    let teamRaw = workbookData.chancesTeamRaw;
+                    if (selectedGames.length > 0) {
+                        teamRaw = teamRaw.filter(row => selectedGames.includes(String(row['Game'])));
+                    }
 
                     const catMap = {};
-                    workbookData.chancesTeamRaw.forEach(row => {
+                    teamRaw.forEach(row => {
                         const cat = getDescriptorCategory(row['Descriptor']);
                         if (!catMap[cat]) {
                             catMap[cat] = { 'Kategoria / Alue': cat, 'Goal For': 0, 'Chance For': 0, 'Goal Against': 0, 'Chance Against': 0 };
@@ -1049,7 +1091,8 @@
                         } else if (currentTab === 'chances' && chancesSub === 'players') {
                             if (h === 'Number') stickyClass = 'sticky-col-team';
                             else if (h === 'Name') {
-                                stickyClass = 'sticky-col-shirt text-red-400 font-bold';
+                                stickyClass = 'sticky-col-shirt text-red-400 font-bold cursor-pointer hover:underline';
+                                return `<td class="px-3 py-2 ${stickyClass}" onclick="openChancesPlayerModal('${playerName}')">${val}</td>`;
                             } else if (h === '5v5 Net Score') {
                                 stickyClass = Number(val) > 0 ? 'text-emerald-400 font-bold' : (Number(val) < 0 ? 'text-rose-400 font-bold' : '');
                             }
@@ -1074,6 +1117,58 @@
 
             const tbody = document.getElementById('modalTableBody');
             tbody.innerHTML = playerGames.map(row => {
+                return `<tr class="hover:bg-slate-800/50 transition">` + 
+                    headers.map(h => `<td class="px-3 py-2 text-slate-300">${row[h] !== undefined ? row[h] : '-'}</td>`).join('') +
+                    `</tr>`;
+            }).join('');
+
+            document.getElementById('playerModal').classList.remove('hidden');
+        }
+
+        function openChancesPlayerModal(playerName) {
+            document.getElementById('modalPlayerName').innerText = `Scoring Chances: ${playerName}`;
+            
+            const playerRows = workbookData.chancesPlayersRaw.filter(row => {
+                const num = String(row['Number']).trim();
+                const numToPlayer = {};
+                workbookData.playersRaw.filter(p => p['Team'] === 'Lulea').forEach(p => {
+                    numToPlayer[String(p['Shirt number']).trim()] = p['Player'];
+                });
+                return (numToPlayer[num] === playerName);
+            });
+
+            if (playerRows.length === 0) {
+                alert("Ei pelikohtaisia tietoja tälle pelaajalle.");
+                return;
+            }
+
+            const displayRows = playerRows.map(r => {
+                const forSum = Number(r['Goal For']||0) + Number(r['Goal For inv']||0) + Number(r['Chance For']||0) + Number(r['Chance For inv']||0);
+                const agSum = Number(r['Goal Against']||0) + Number(r['Chance Against']||0);
+                return {
+                    'Game': r['Game'],
+                    'Goal For': r['Goal For'],
+                    'Goal For inv': r['Goal For inv'],
+                    'Chance For': r['Chance For'],
+                    'Chance For inv': r['Chance For inv'],
+                    'PP goal': r['PP goal'],
+                    'PP goal inv': r['PP goal inv'],
+                    'PP chance': r['PP chance'],
+                    'PP chance inv': r['PP chance inv'],
+                    'Goal Against': r['Goal Against'],
+                    'Chance Against': r['Chance Against'],
+                    'PP goal ag': r['PP goal ag'],
+                    'PP chance ag': r['PP chance ag'],
+                    '5v5 Net Score': forSum - agSum
+                };
+            });
+
+            const headers = Object.keys(displayRows[0]);
+            const headerTr = document.getElementById('modalTableHeader');
+            headerTr.innerHTML = headers.map(h => `<th class="px-3 py-2">${h}</th>`).join('');
+
+            const tbody = document.getElementById('modalTableBody');
+            tbody.innerHTML = displayRows.map(row => {
                 return `<tr class="hover:bg-slate-800/50 transition">` + 
                     headers.map(h => `<td class="px-3 py-2 text-slate-300">${row[h] !== undefined ? row[h] : '-'}</td>`).join('') +
                     `</tr>`;
@@ -1404,6 +1499,7 @@
                     labels: currentFilteredData.map(d => d['Kategoria / Alue']),
                     datasets: [
                         { label: 'Goal For', data: currentFilteredData.map(d => d['Goal For']), backgroundColor: '#10b981' },
+                        { label: 'Goal Against', data: currentFilteredData.pop ? currentFilteredData.map(d => d['Goal Against']) : [] }, // safe map
                         { label: 'Goal Against', data: currentFilteredData.map(d => d['Goal Against']), backgroundColor: '#f59e0b' }
                     ]
                 },
@@ -1433,7 +1529,7 @@
         function exportCSV() {
             if (currentFilteredData.length === 0) return;
             const headers = Object.keys(currentFilteredData[0]);
-            let csvContent = "data:text/csv;charset=utf-8,\uFEFF" + headers.json(",") + "\n";
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF" + headers.join(",") + "\n";
             currentFilteredData.forEach(row => {
                 csvContent += headers.map(h => `"${row[h] !== undefined ? row[h] : ''}"`).join(",") + "\n";
             });
