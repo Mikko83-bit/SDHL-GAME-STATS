@@ -105,6 +105,60 @@
             </div>
         </div>
 
+        <!-- Charts / Comparisons (Player Stats) -->
+        <div id="chartsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 id="chart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals vs Expected Goals (xG)</h3>
+                <div class="relative h-72">
+                    <canvas id="chart1"></canvas>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 id="chart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Shots & CORSI metrics</h3>
+                <div class="relative h-72">
+                    <canvas id="chart2"></canvas>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 id="chart3Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Top Game Score / 60</h3>
+                <div class="relative h-72">
+                    <canvas id="chart3"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Team Charts Container (Team Stats) -->
+        <div id="teamChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" style="display: none;">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Goals vs Expected Goals (xG)</h3>
+                <div class="relative h-80">
+                    <canvas id="teamChart1"></canvas>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Net xG (xG - Opponent's xG)</h3>
+                <div class="relative h-80">
+                    <canvas id="teamChart2"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scoring Chances Charts Container -->
+        <div id="chancesChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" style="display: none;">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 id="chanceChart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalipaikat: For vs Against</h3>
+                <div class="relative h-80">
+                    <canvas id="chanceChart1"></canvas>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalit: For vs Against</h3>
+                <div class="relative h-80">
+                    <canvas id="chanceChart2"></canvas>
+                </div>
+            </div>
+        </div>
+
         <!-- Standard Table Container -->
         <div id="tableSection" class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden mb-8">
             <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
@@ -187,60 +241,6 @@
             </div>
         </div>
 
-        <!-- Charts / Comparisons (Player Stats) -->
-        <div id="chartsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals vs Expected Goals (xG)</h3>
-                <div class="relative h-72">
-                    <canvas id="chart1"></canvas>
-                </div>
-            </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Shots & CORSI metrics</h3>
-                <div class="relative h-72">
-                    <canvas id="chart2"></canvas>
-                </div>
-            </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chart3Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Top Game Score / 60</h3>
-                <div class="relative h-72">
-                    <canvas id="chart3"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Team Charts Container (Team Stats) -->
-        <div id="teamChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6" style="display: none;">
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Goals vs Expected Goals (xG)</h3>
-                <div class="relative h-80">
-                    <canvas id="teamChart1"></canvas>
-                </div>
-            </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Net xG (xG - Opponent's xG)</h3>
-                <div class="relative h-80">
-                    <canvas id="teamChart2"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Scoring Chances Charts Container -->
-        <div id="chancesChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6" style="display: none;">
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chanceChart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalipaikat: For vs Against</h3>
-                <div class="relative h-80">
-                    <canvas id="chanceChart1"></canvas>
-                </div>
-            </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalit: For vs Against</h3>
-                <div class="relative h-80">
-                    <canvas id="chanceChart2"></canvas>
-                </div>
-            </div>
-        </div>
-
     </main>
 
     <!-- Player Game History Modal -->
@@ -289,6 +289,8 @@
         let compareChartInstance = null;
         let chanceChart1Instance = null;
         let chanceChart2Instance = null;
+
+        const categoryOrder = ['OZ', 'Rush', 'Turnovers', 'Takeaways', 'PP', 'Period 1', 'Period 2', 'Period 3', 'OT', 'Others'];
 
         function normalizeTeamName(name) {
             if (!name) return '-';
@@ -366,7 +368,6 @@
             return ordered;
         }
 
-        // Luokittelu funktio Descriptorille
         function getDescriptorCategory(desc) {
             if (!desc) return 'Others';
             const d = String(desc).trim();
@@ -592,22 +593,41 @@
 
                 if (!aggregated[playerName]) {
                     aggregated[playerName] = {
-                        'Shirt number': num,
-                        'Player': playerName,
+                        'Number': num,
+                        'Name': playerName,
                         'Goal For': 0,
+                        'Goal For inv': 0,
                         'Chance For': 0,
-                        'PP Goal': 0,
-                        'PP Chance': 0,
+                        'Chance For inv': 0,
+                        'PP goal': 0,
+                        'PP goal inv': 0,
+                        'PP chance': 0,
+                        'PP chance inv': 0,
                         'Goal Against': 0,
-                        'Chance Against': 0
+                        'Chance Against': 0,
+                        'PP goal ag': 0,
+                        'PP chance ag': 0
                     };
                 }
                 aggregated[playerName]['Goal For'] += Number(row['Goal For']) || 0;
+                aggregated[playerName]['Goal For inv'] += Number(row['Goal For inv']) || 0;
                 aggregated[playerName]['Chance For'] += Number(row['Chance For']) || 0;
-                aggregated[playerName]['PP Goal'] += Number(row['PP goal']) || 0;
-                aggregated[playerName]['PP Chance'] += Number(row['PP chance']) || 0;
+                aggregated[playerName]['Chance For inv'] += Number(row['Chance For inv']) || 0;
+                aggregated[playerName]['PP goal'] += Number(row['PP goal']) || 0;
+                aggregated[playerName]['PP goal inv'] += Number(row['PP goal inv']) || 0;
+                aggregated[playerName]['PP chance'] += Number(row['PP chance']) || 0;
+                aggregated[playerName]['PP chance inv'] += Number(row['PP chance inv']) || 0;
                 aggregated[playerName]['Goal Against'] += Number(row['Goal Against']) || 0;
                 aggregated[playerName]['Chance Against'] += Number(row['Chance Against']) || 0;
+                aggregated[playerName]['PP goal ag'] += Number(row['PP goal ag']) || 0;
+                aggregated[playerName]['PP chance ag'] += Number(row['PP chance ag']) || 0;
+            });
+
+            // Lasketaan 5v5 Net Score kaavalla: (Goal For + Goal For inv + Chance For + Chance For inv) - (Goal Against + Chance Against)
+            Object.values(aggregated).forEach(row => {
+                const forSum = row['Goal For'] + row['Goal For inv'] + row['Chance For'] + row['Chance For inv'];
+                const againstSum = row['Goal Against'] + row['Chance Against'];
+                row['5v5 Net Score'] = forSum - againstSum;
             });
 
             workbookData.chancesPlayersAggregated = Object.values(aggregated);
@@ -616,7 +636,7 @@
 
         function populatePlayersFilter() {
             const select = document.getElementById('filterPlayersMulti');
-            const players = workbookData.chancesPlayersAggregated.map(p => p['Player']).sort();
+            const players = workbookData.chancesPlayersAggregated.map(p => p['Name']).sort();
             select.innerHTML = players.map(p => `<option value="${p}">${p}</option>`).join('');
             select.removeEventListener('change', renderCurrentView);
             select.addEventListener('change', renderCurrentView);
@@ -734,11 +754,11 @@
                 renderTable();
             } else if (currentTab === 'chances') {
                 if (chancesSub === 'players') {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Pelaajien tilastot (For vs Against)";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Pelaajien tilastot (5v5 Net Score)";
                     const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
                     let data = [...workbookData.chancesPlayersAggregated];
                     if (selectedPlayers.length > 0) {
-                        data = data.filter(d => selectedPlayers.includes(d['Player']));
+                        data = data.filter(d => selectedPlayers.includes(d['Name']));
                     }
                     currentFilteredData = data;
                     renderTable();
@@ -764,6 +784,10 @@
                     if (selectedCategories.length > 0) {
                         arr = arr.filter(item => selectedCategories.includes(item['Kategoria / Alue']));
                     }
+
+                    arr.sort((a, b) => {
+                        return categoryOrder.indexOf(a['Kategoria / Alue']) - categoryOrder.indexOf(b['Kategoria / Alue']);
+                    });
 
                     currentFilteredData = arr;
                     renderTable();
@@ -1007,7 +1031,7 @@
 
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = filtered.map(row => {
-                const playerName = row['Player'];
+                const playerName = row['Player'] || row['Name'];
                 return `<tr class="hover:bg-slate-800/50 transition">` + 
                     headers.map((h, index) => {
                         let val = row[h] !== undefined ? row[h] : '-';
@@ -1021,6 +1045,13 @@
                             else if (h === 'Player') {
                                 stickyClass = 'sticky-col-player';
                                 return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline ${stickyClass}" onclick="openPlayerModal('${playerName}')">${val}</td>`;
+                            }
+                        } else if (currentTab === 'chances' && chancesSub === 'players') {
+                            if (h === 'Number') stickyClass = 'sticky-col-team';
+                            else if (h === 'Name') {
+                                stickyClass = 'sticky-col-shirt text-red-400 font-bold';
+                            } else if (h === '5v5 Net Score') {
+                                stickyClass = Number(val) > 0 ? 'text-emerald-400 font-bold' : (Number(val) < 0 ? 'text-rose-400 font-bold' : '');
                             }
                         } else if (currentTab === 'teams' || currentTab === 'lines') {
                             if (h === 'Team') stickyClass = 'sticky-col-team text-red-400 font-bold';
@@ -1290,11 +1321,11 @@
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            document.getElementById('chanceChart1Title').innerText = "Luleå Pelaajat: Maalipaikat (Chance For vs Against)";
+            document.getElementById('chanceChart1Title').innerText = "Luleå Pelaajat: 5v5 Net Score (Maalit & Paikat)";
             document.getElementById('chanceChart2Title').innerText = "Luleå Pelaajat: Maalit (Goal For vs Against)";
 
-            const sorted = [...currentFilteredData].sort((a, b) => b['Chance For'] - a['Chance For']).slice(0, 10);
-            const labels = sorted.map(d => d['Player']);
+            const sorted = [...currentFilteredData].sort((a, b) => b['5v5 Net Score'] - a['5v5 Net Score']).slice(0, 10);
+            const labels = sorted.map(d => d['Name']);
 
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
                 type: 'bar',
@@ -1302,8 +1333,7 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Chance For', data: sorted.map(d => d['Chance For']), backgroundColor: '#3b82f6' },
-                        { label: 'Chance Against', data: sorted.map(d => d['Chance Against']), backgroundColor: '#ef4444' }
+                        { label: '5v5 Net Score', data: sorted.map(d => d['5v5 Net Score']), backgroundColor: '#10b981' }
                     ]
                 },
                 options: {
@@ -1317,7 +1347,7 @@
             });
 
             const sortedGoals = [...currentFilteredData].sort((a, b) => b['Goal For'] - a['Goal For']).slice(0, 10);
-            const labelsGoals = sortedGoals.map(d => d['Player']);
+            const labelsGoals = sortedGoals.map(d => d['Name']);
 
             chanceChart2Instance = new Chart(document.getElementById('chanceChart2').getContext('2d'), {
                 type: 'bar',
@@ -1403,7 +1433,7 @@
         function exportCSV() {
             if (currentFilteredData.length === 0) return;
             const headers = Object.keys(currentFilteredData[0]);
-            let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF" + headers.json(",") + "\n";
             currentFilteredData.forEach(row => {
                 csvContent += headers.map(h => `"${row[h] !== undefined ? row[h] : ''}"`).join(",") + "\n";
             });
