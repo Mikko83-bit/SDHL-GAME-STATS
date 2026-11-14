@@ -31,7 +31,7 @@
         <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
             <div>
                 <h1 class="text-xl font-black tracking-wider text-white uppercase">SDHL Game Stats</h1>
-                <p class="text-xs text-red-300">Player info stays on the left • Click column header to sort</p>
+                <p class="text-xs text-red-300">Player info stays on the left • Click column header to sort table & update graphs</p>
             </div>
             
             <div class="flex flex-wrap items-center gap-3">
@@ -167,7 +167,7 @@
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Faceoffs Won (%)</h3>
+                <h3 id="teamChart3Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Faceoffs Won (%)</h3>
                 <div class="relative h-80">
                     <canvas id="teamChart3"></canvas>
                 </div>
@@ -1206,6 +1206,11 @@
             });
 
             renderTable();
+
+            // Jos ollaan Team Stats -näkymässä, päivitetään kolmas kaavio suoraan klikatun sarakkeen mukaiseksi!
+            if (currentTab === 'teams') {
+                renderTeamCharts(column);
+            }
         }
 
         function renderTable() {
@@ -1368,6 +1373,7 @@
                     },
                     scales: {
                         r: {
+                            min: 0,
                             grid: { color: '#334155' },
                             angleLines: { color: '#334155' },
                             pointLabels: { color: '#94a3b8', font: { size: 10, weight: 'bold' } },
@@ -1653,72 +1659,19 @@
             }
         }
 
-        function renderTeamCharts() {
+        function renderTeamCharts(sortCol = null) {
             if (teamChart1Instance) teamChart1Instance.destroy();
             if (teamChart2Instance) teamChart2Instance.destroy();
             if (teamChart3Instance) teamChart3Instance.destroy();
 
             const teamsData = [...workbookData.teamsRaw];
-            teamsData.sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0));
 
-            const labels = teamsData.map(d => d['Team']);
-            const goals = teamsData.map(d => Number(d['Goals']) || 0);
-            
-            const xgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('xgn') || k.toLowerCase().includes('expected goals')) || 'xG (Expected goals)';
+            // 1. Kaavio: Goals vs Expected Goals
+            teamsData.sort((a, b) => (Number(b['GOALS'] || b['Goals']) || 0) - (Number(a['GOALS'] || a['Goals']) || 0));
+            const labels = teamsData.map(d => d['TEAM'] || d['Team']);
+            const goals = teamsData.map(d => Number(d['GOALS'] || d['Goals']) || 0);
+            const xgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('xgn') || k.toLowerCase().includes('expected goals')) || 'XG (EXPECTED GOALS)';
             const xg = teamsData.map(d => Number(Number(d[xgKey] || 0).toFixed(2)));
-
-            const netXgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('net xg')) || "Net xG (xG - Opponent's xG)";
-            const netXg = teamsData.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
-
-            // Joustava haku faceoff-prosenttisarakkeelle
-            const sampleRow = teamsData[0] || {};
-            const keys = Object.keys(sampleRow);
-            const foKey = keys.find(k => {
-                const norm = k.toLowerCase().replace(/[\s,\.%]/g, '');
-                return norm.includes('faceoffwon') || norm.includes('facewon') || norm.includes('fo');
-            });
-
-            // Vaihtoehtoisesti etsitään erikseen voitot ja häviöt jos prosenttia ei suoraan löydy
-            const foWonKey = keys.find(k => {
-                const norm = k.toLowerCase().replace(/[\s,\.%]/g, '');
-                return norm.includes('faceoffswon') || (norm.includes('won') && !norm.includes('%'));
-            });
-            const foLostKey = keys.find(k => {
-                const norm = k.toLowerCase().replace(/[\s,\.%]/g, '');
-                return norm.includes('faceoffslost') || norm.includes('lost');
-            });
-
-            const sortedByFo = [...teamsData].sort((a, b) => {
-                let valA = 0, valB = 0;
-                if (foKey && a[foKey] !== undefined) {
-                    valA = parseFloat(String(a[foKey]).replace('%', '')) || 0;
-                } else if (foWonKey && foLostKey) {
-                    let wA = Number(a[foWonKey]) || 0;
-                    let lA = Number(a[foLostKey]) || 0;
-                    valA = (wA + lA) > 0 ? (wA / (wA + lA)) * 100 : 0;
-                }
-                if (foKey && b[foKey] !== undefined) {
-                    valB = parseFloat(String(b[foKey]).replace('%', '')) || 0;
-                } else if (foWonKey && foLostKey) {
-                    let wB = Number(b[foWonKey]) || 0;
-                    let lB = Number(b[foLostKey]) || 0;
-                    valB = (wB + lB) > 0 ? (wB / (wB + lB)) * 100 : 0;
-                }
-                return valB - valA;
-            });
-
-            const foLabels = sortedByFo.map(d => d['Team']);
-            const foValues = sortedByFo.map(d => {
-                let val = 0;
-                if (foKey && d[foKey] !== undefined) {
-                    val = parseFloat(String(d[foKey]).replace('%', ''));
-                } else if (foWonKey && foLostKey) {
-                    let w = Number(d[foWonKey]) || 0;
-                    let l = Number(d[foLostKey]) || 0;
-                    val = (w + l) > 0 ? (w / (w + l)) * 100 : 0;
-                }
-                return isNaN(val) ? 0 : Number(val.toFixed(1));
-            });
 
             teamChart1Instance = new Chart(document.getElementById('teamChart1').getContext('2d'), {
                 type: 'bar',
@@ -1743,8 +1696,10 @@
                 }
             });
 
+            // 2. Kaavio: Net xG
+            const netXgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('net xg')) || "NET XG (XG - OPPONENT'S XG)";
             const sortedByNetXg = [...teamsData].sort((a, b) => (Number(b[netXgKey]) || 0) - (Number(a[netXgKey]) || 0));
-            const netLabels = sortedByNetXg.map(d => d['Team']);
+            const netLabels = sortedByNetXg.map(d => d['TEAM'] || d['Team']);
             const netValues = sortedByNetXg.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
             const bgColors = netValues.map(v => v >= 0 ? '#10b981' : '#ef4444');
 
@@ -1770,24 +1725,46 @@
                 }
             });
 
+            // 3. Dynaaminen / Kolmas kaavio (vaihtuu sen mukaan mitä saraketta klikataan tai oletuksena Faceoffs Won %)
+            let activeCol = sortCol;
+            if (!activeCol || activeCol === 'TEAM' || activeCol === 'Team') {
+                activeCol = Object.keys(teamsData[0] || {}).find(k => k.toUpperCase().includes('FACEOFFS WON, %')) || 'FACEOFFS WON, %';
+            }
+
+            document.getElementById('teamChart3Title').innerText = `Teams: ${activeCol} (Sorted by Table)`;
+
+            const sortedByCol = [...teamsData].sort((a, b) => {
+                let valA = parseFloat(String(a[activeCol] || 0).replace('%', '')) || 0;
+                let valB = parseFloat(String(b[activeCol] || 0).replace('%', '')) || 0;
+                return isAscending ? valA - valB : valB - valA;
+            });
+
+            const colLabels = sortedByCol.map(d => d['TEAM'] || d['Team']);
+            const colValues = sortedByCol.map(d => {
+                let val = parseFloat(String(d[activeCol] || 0).replace('%', ''));
+                return isNaN(val) ? 0 : Number(val.toFixed(2));
+            });
+
+            const isPct = String(activeCol).includes('%');
+
             teamChart3Instance = new Chart(document.getElementById('teamChart3').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: foLabels,
+                    labels: colLabels,
                     datasets: [
-                        { label: 'Faceoffs Won (%)', data: foValues, backgroundColor: '#f59e0b' }
+                        { label: activeCol, data: colValues, backgroundColor: '#f59e0b' }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: {
                         legend: { labels: { color: '#cbd5e1', font: { size: 11 } } },
-                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 10, weight: 'bold' }, formatter: (v) => v + '%' }
+                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 10, weight: 'bold' }, formatter: (v) => isPct ? v + '%' : v }
                     },
                     scales: {
                         x: { ticks: { color: '#94a3b8', font: { size: 10 } } },
-                        y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' } }
+                        y: { ticks: { color: '#94a3b8', callback: (v) => isPct ? v + '%' : v } }
                     }
                 }
             });
