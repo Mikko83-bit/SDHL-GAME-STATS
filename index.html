@@ -71,55 +71,55 @@
     <!-- Main Content -->
     <main class="max-w-[98%] mx-auto px-2 py-6">
 
-        <!-- Erikoissuodattimet Scoring Chances -välilehdelle -->
+        <!-- Scoring Chances Filters Bar -->
         <div id="chancesFiltersBar" style="display: none;" class="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-4 shadow-xl grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div>
-                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Valitse näkymä / Alapaneeli</label>
+                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Select View / Sub-panel</label>
                 <div class="flex gap-1 bg-slate-950 p-1 rounded border border-slate-800">
-                    <button onclick="switchChancesSub('players')" id="subBtnPlayers" class="flex-1 px-3 py-1 text-[11px] font-bold uppercase rounded bg-red-900 text-white transition">Pelaajat</button>
-                    <button onclick="switchChancesSub('team')" id="subBtnTeam" class="flex-1 px-3 py-1 text-[11px] font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition">Pelitavat / Alueet</button>
+                    <button onclick="switchChancesSub('players')" id="subBtnPlayers" class="flex-1 px-3 py-1 text-[11px] font-bold uppercase rounded bg-red-900 text-white transition">Players</button>
+                    <button onclick="switchChancesSub('team')" id="subBtnTeam" class="flex-1 px-3 py-1 text-[11px] font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition">Play Styles / Areas</button>
                 </div>
             </div>
 
             <div id="playerMultiSelectContainer">
-                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Pelaajat (Monivalinta)</label>
+                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Players (Multi-select)</label>
                 <select id="filterPlayersMulti" multiple class="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-1.5 h-20 focus:outline-none custom-scrollbar">
                 </select>
-                <p class="text-[9px] text-slate-400 mt-0.5">Pidä Ctrl / Cmd pohjassa valitaksesi useita.</p>
+                <p class="text-[9px] text-slate-400 mt-0.5">Hold Ctrl / Cmd to select multiple.</p>
             </div>
 
             <div id="categoryMultiSelectContainer" style="display: none;">
-                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Alueet / Kategoriat (Monivalinta)</label>
+                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Areas / Categories (Multi-select)</label>
                 <select id="filterCategoryMulti" multiple class="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-1.5 h-20 focus:outline-none custom-scrollbar">
-                    <option value="OZ">OZ (Hyökkäusalue)</option>
-                    <option value="Rush">Rush (Vastahyökkäykset)</option>
-                    <option value="Turnovers">Turnovers (Menetykset)</option>
-                    <option value="Takeaways">Takeaways (Riistot)</option>
-                    <option value="PP">PP (Ylivoima / Erikoistilanteet)</option>
+                    <option value="OZ">OZ (Offensive Zone)</option>
+                    <option value="Rush">Rush</option>
+                    <option value="Turnovers">Turnovers</option>
+                    <option value="Takeaways">Takeaways</option>
+                    <option value="PP">PP (Powerplay / Special Teams)</option>
                     <option value="Period 1">Period 1</option>
                     <option value="Period 2">Period 2</option>
                     <option value="Period 3">Period 3</option>
-                    <option value="OT">OT (Jatkoaika)</option>
-                    <option value="Others">Others (Muut)</option>
+                    <option value="OT">OT (Overtime)</option>
+                    <option value="Others">Others</option>
                 </select>
-                <p class="text-[9px] text-slate-400 mt-0.5">Pidä Ctrl / Cmd pohjassa valitaksesi useita.</p>
+                <p class="text-[9px] text-slate-400 mt-0.5">Hold Ctrl / Cmd to select multiple.</p>
             </div>
 
             <div>
-                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Peli / Pelit (Monivalinta)</label>
+                <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Game / Games (Multi-select)</label>
                 <select id="filterChancesGamesMulti" multiple class="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-1.5 h-20 focus:outline-none custom-scrollbar">
                 </select>
-                <p class="text-[9px] text-slate-400 mt-0.5">Tyhjä = Kaikki pelit yhteensä.</p>
+                <p class="text-[9px] text-slate-400 mt-0.5">Empty = All games total.</p>
             </div>
         </div>
 
-        <!-- Trends Välilehden Sisältö -->
+        <!-- Trends Section -->
         <div id="trendsSection" class="space-y-6" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
                 <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
                     <div>
-                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game Scoring Chances Trend & Averages</h2>
-                        <p class="text-xs text-slate-400">Total For vs Total Against across all played games with average lines</p>
+                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game Scoring Chances Trend & Averages (5v5)</h2>
+                        <p class="text-xs text-slate-400">Total For vs Total Against (OZ, Rush, Turnovers, Takeaways) across played games with average lines</p>
                     </div>
                     <div id="trendStatsSummary" class="flex gap-4 text-xs font-semibold text-slate-300 bg-slate-950 px-4 py-2 rounded border border-slate-800">
                     </div>
@@ -153,7 +153,7 @@
         </div>
 
         <!-- Team Charts Container (Team Stats) -->
-        <div id="teamChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" style="display: none;">
+        <div id="teamChartsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
                 <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Goals vs Expected Goals (xG)</h3>
                 <div class="relative h-80">
@@ -166,18 +166,24 @@
                     <canvas id="teamChart2"></canvas>
                 </div>
             </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Teams: Faceoffs Won (%)</h3>
+                <div class="relative h-80">
+                    <canvas id="teamChart3"></canvas>
+                </div>
+            </div>
         </div>
 
         <!-- Scoring Chances Charts Container -->
         <div id="chancesChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chanceChart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalipaikat: For vs Against</h3>
+                <h3 id="chanceChart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Scoring Chances: For vs Against</h3>
                 <div class="relative h-80">
                     <canvas id="chanceChart1"></canvas>
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Maalit: For vs Against</h3>
+                <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals: For vs Against</h3>
                 <div class="relative h-80">
                     <canvas id="chanceChart2"></canvas>
                 </div>
@@ -268,13 +274,13 @@
 
     </main>
 
-    <!-- Player Game History Modal -->
+    <!-- Player / Category Game History Modal -->
     <div id="playerModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             <div class="bg-slate-950 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
                 <div>
-                    <h3 id="modalPlayerName" class="text-lg font-bold text-white">Player Details</h3>
-                    <p class="text-xs text-red-400">Game-by-game statistics during the season</p>
+                    <h3 id="modalPlayerName" class="text-lg font-bold text-white">Details</h3>
+                    <p id="modalSubtitle" class="text-xs text-red-400">Detailed breakdown</p>
                 </div>
                 <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 py-1">&times;</button>
             </div>
@@ -311,6 +317,7 @@
         let chart3Instance = null;
         let teamChart1Instance = null;
         let teamChart2Instance = null;
+        let teamChart3Instance = null;
         let compareChartInstance = null;
         let chanceChart1Instance = null;
         let chanceChart2Instance = null;
@@ -621,7 +628,7 @@
             const selectGame = document.getElementById('filterChancesGamesMulti');
             if (selectGame) {
                 const curSelected = Array.from(selectGame.selectedOptions).map(o => o.value);
-                selectGame.innerHTML = gamesArray.map(g => `<option value="${g}">Peli ${g}</option>`).join('');
+                selectGame.innerHTML = gamesArray.map(g => `<option value="${g}">Game ${g}</option>`).join('');
                 Array.from(selectGame.options).forEach(opt => {
                     if (curSelected.includes(opt.value)) opt.selected = true;
                 });
@@ -641,7 +648,7 @@
                 const num = String(row['Number']).trim();
                 if (!num || num === '0') return;
 
-                const playerName = numToPlayer[num] || `Pelaaja #${num}`;
+                const playerName = numToPlayer[num] || `Player #${num}`;
 
                 if (!aggregated[playerName]) {
                     aggregated[playerName] = {
@@ -811,7 +818,7 @@
             } else if (currentTab === 'chances') {
                 buildChancesData();
                 if (chancesSub === 'players') {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Pelaajien tilastot (5v5 Net Score)";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Player Stats (5v5 Net Score)";
                     const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
                     let data = [...workbookData.chancesPlayersAggregated];
                     if (selectedPlayers.length > 0) {
@@ -821,7 +828,7 @@
                     renderTable();
                     renderChancesPlayerCharts();
                 } else {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Alueet ja Pelitavat (OZ, Rush, Turnovers, Takeaways, PP...)";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Areas & Play Styles (OZ, Rush, Turnovers, Takeaways, PP...) - Click category row for breakdown";
                     
                     const selectedCategories = Array.from(document.getElementById('filterCategoryMulti').selectedOptions).map(opt => opt.value);
                     const selectedGames = Array.from(document.getElementById('filterChancesGamesMulti').selectedOptions).map(opt => opt.value);
@@ -835,7 +842,7 @@
                     teamRaw.forEach(row => {
                         const cat = getDescriptorCategory(row['Descriptor']);
                         if (!catMap[cat]) {
-                            catMap[cat] = { 'Kategoria / Alue': cat, 'Goal For': 0, 'Chance For': 0, 'Goal Against': 0, 'Chance Against': 0 };
+                            catMap[cat] = { 'Category / Area': cat, 'Goal For': 0, 'Chance For': 0, 'Goal Against': 0, 'Chance Against': 0 };
                         }
                         catMap[cat]['Goal For'] += Number(row['Goal For']) || 0;
                         catMap[cat]['Chance For'] += Number(row['Chance For']) || 0;
@@ -845,11 +852,11 @@
 
                     let arr = Object.values(catMap);
                     if (selectedCategories.length > 0) {
-                        arr = arr.filter(item => selectedCategories.includes(item['Kategoria / Alue']));
+                        arr = arr.filter(item => selectedCategories.includes(item['Category / Area']));
                     }
 
                     arr.sort((a, b) => {
-                        return categoryOrder.indexOf(a['Kategoria / Alue']) - categoryOrder.indexOf(b['Kategoria / Alue']);
+                        return categoryOrder.indexOf(a['Category / Area']) - categoryOrder.indexOf(b['Category / Area']);
                     });
 
                     currentFilteredData = arr;
@@ -864,45 +871,43 @@
         function renderTrendsView() {
             if (trendChartInstance) trendChartInstance.destroy();
 
-            // Lasketaan pelikohtaiset Total For ja Total Against Team-sheetistä tai Chances Team -datasta
-            // Jokaiselle pelille (Game):
-            // Total For = sum(Goal For + Goal For inv + Chance For + Chance For inv) tai vastaava team-tasolla
+            const validCats = ['OZ', 'Rush', 'Turnovers', 'Takeaways'];
             const gameMap = {};
-            
-            if (workbookData.chancesTeamRaw.length > 0) {
-                workbookData.chancesTeamRaw.forEach(row => {
-                    const g = String(row['Game']);
-                    if (!g || g === 'undefined') return;
-                    if (!gameMap[g]) {
-                        gameMap[g] = { game: g, totalFor: 0, totalAgainst: 0 };
-                    }
-                    const gf = Number(row['Goal For']) || 0;
-                    const gfi = Number(row['Goal For inv']) || 0;
-                    const cf = Number(row['Chance For']) || 0;
-                    const cfi = Number(row['Chance For inv']) || 0;
-                    const ga = Number(row['Goal Against']) || 0;
-                    const ca = Number(row['Chance Against']) || 0;
 
-                    gameMap[g].totalFor += (gf + gfi + cf + cfi);
-                    gameMap[g].totalAgainst += (ga + ca);
-                });
-            }
+            workbookData.chancesTeamRaw.forEach(row => {
+                const descCat = getDescriptorCategory(row['Descriptor']);
+                if (!validCats.includes(descCat)) return;
 
-            const gamesArr = Object.values(gameMap).sort((a,b) => Number(a.game) - Number(b.game));
-            const labels = gamesArr.map(item => `Peli ${item.game}`);
+                const g = String(row['Game']);
+                if (!g || g === 'undefined' || g === '0') return;
+
+                if (!gameMap[g]) {
+                    gameMap[g] = { game: g, totalFor: 0, totalAgainst: 0 };
+                }
+
+                const gf = Number(row['Goal For']) || 0;
+                const cf = Number(row['Chance For']) || 0;
+                const ga = Number(row['Goal Against']) || 0;
+                const ca = Number(row['Chance Against']) || 0;
+
+                gameMap[g].totalFor += (gf + cf);
+                gameMap[g].totalAgainst += (ga + ca);
+            });
+
+            const gamesArr = Object.values(gameMap).sort((a, b) => Number(a.game) - Number(b.game));
+            const labels = gamesArr.map(item => `Game ${item.game}`);
             const dataFor = gamesArr.map(item => item.totalFor);
             const dataAgainst = gamesArr.map(item => item.totalAgainst);
 
-            const avgFor = dataFor.length > 0 ? (dataFor.reduce((a,b)=>a+b,0) / dataFor.length).toFixed(1) : 0;
-            const avgAgainst = dataAgainst.length > 0 ? (dataAgainst.reduce((a,b)=>a+b,0) / dataAgainst.length).toFixed(1) : 0;
+            const avgFor = dataFor.length > 0 ? (dataFor.reduce((a, b) => a + b, 0) / dataFor.length).toFixed(1) : 0;
+            const avgAgainst = dataAgainst.length > 0 ? (dataAgainst.reduce((a, b) => a + b, 0) / dataAgainst.length).toFixed(1) : 0;
 
             document.getElementById('trendStatsSummary').innerHTML = `
-                <span>Pelit yhteensä: <strong class="text-white">${gamesArr.length}</strong></span>
-                <span>Avg Total For: <strong class="text-blue-400">${avgFor}</strong></span>
-                <span>Avg Total Against: <strong class="text-rose-400">${avgAgainst}</strong></span>
+                <span>Total Games: <strong class="text-white">${gamesArr.length}</strong></span>
+                <span>Avg For (Team): <strong class="text-blue-400">${avgFor}</strong></span>
+                <span>Avg Against (Team): <strong class="text-rose-400">${avgAgainst}</strong></span>
             `;
 
-            // Keskiarvoviivat datasetetteihin
             const avgForArr = gamesArr.map(() => Number(avgFor));
             const avgAgainstArr = gamesArr.map(() => Number(avgAgainst));
 
@@ -911,7 +916,7 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Total For', data: dataFor, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, tension: 0.1 },
+                        { label: 'Total For (OZ, Rush, TO, TA)', data: dataFor, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, tension: 0.1 },
                         { label: 'Total Against', data: dataAgainst, borderColor: '#ef4444', backgroundColor: '#ef4444', borderWidth: 2, tension: 0.1 },
                         { label: 'Avg For', data: avgForArr, borderColor: '#3b82f6', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
                         { label: 'Avg Against', data: avgAgainstArr, borderColor: '#ef4444', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
@@ -1166,6 +1171,7 @@
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = filtered.map(row => {
                 const playerName = row['Player'] || row['Name'];
+                const categoryName = row['Category / Area'];
                 return `<tr class="hover:bg-slate-800/50 transition">` + 
                     headers.map((h, index) => {
                         let val = row[h] !== undefined ? row[h] : '-';
@@ -1188,6 +1194,10 @@
                             } else if (h === '5v5 Net Score') {
                                 stickyClass = Number(val) > 0 ? 'text-emerald-400 font-bold' : (Number(val) < 0 ? 'text-rose-400 font-bold' : '');
                             }
+                        } else if (currentTab === 'chances' && chancesSub === 'team') {
+                            if (h === 'Category / Area') {
+                                return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline" onclick="openCategoryModal('${categoryName}')">${val}</td>`;
+                            }
                         } else if (currentTab === 'teams' || currentTab === 'lines') {
                             if (h === 'Team') stickyClass = 'sticky-col-team text-red-400 font-bold';
                         }
@@ -1199,6 +1209,7 @@
 
         function openPlayerModal(playerName) {
             document.getElementById('modalPlayerName').innerText = `Player: ${playerName}`;
+            document.getElementById('modalSubtitle').innerText = "Game-by-game statistics during the season";
             const playerGames = workbookData.playersRaw.filter(row => row['Player'] === playerName);
 
             if (playerGames.length === 0) return;
@@ -1219,6 +1230,7 @@
 
         function openChancesPlayerModal(playerName) {
             document.getElementById('modalPlayerName').innerText = `Scoring Chances: ${playerName}`;
+            document.getElementById('modalSubtitle').innerText = "Game-by-game scoring chances breakdown";
             
             const playerRows = workbookData.chancesPlayersRaw.filter(row => {
                 const num = String(row['Number']).trim();
@@ -1230,7 +1242,7 @@
             });
 
             if (playerRows.length === 0) {
-                alert("Ei pelikohtaisia tietoja tälle pelaajalle.");
+                alert("No game-by-game data available for this player.");
                 return;
             }
 
@@ -1254,6 +1266,55 @@
                     '5v5 Net Score': forSum - agSum
                 };
             });
+
+            const headers = Object.keys(displayRows[0]);
+            const headerTr = document.getElementById('modalTableHeader');
+            headerTr.innerHTML = headers.map(h => `<th class="px-3 py-2">${h}</th>`).join('');
+
+            const tbody = document.getElementById('modalTableBody');
+            tbody.innerHTML = displayRows.map(row => {
+                return `<tr class="hover:bg-slate-800/50 transition">` + 
+                    headers.map(h => `<td class="px-3 py-2 text-slate-300">${row[h] !== undefined ? row[h] : '-'}</td>`).join('') +
+                    `</tr>`;
+            }).join('');
+
+            document.getElementById('playerModal').classList.remove('hidden');
+        }
+
+        function openCategoryModal(categoryName) {
+            document.getElementById('modalPlayerName').innerText = `Category Breakdown: ${categoryName}`;
+            document.getElementById('modalSubtitle').innerText = "Detailed sub-descriptors breakdown";
+
+            // Haetaan Team-datasta kaikki rivit jotka kuuluvat tähän kategoriaan
+            const matchingRows = workbookData.chancesTeamRaw.filter(row => {
+                return getDescriptorCategory(row['Descriptor']) === categoryName;
+            });
+
+            if (matchingRows.length === 0) {
+                alert("No breakdown data available for this category.");
+                return;
+            }
+
+            // Aggregoidaan descriptorin mukaan
+            const descMap = {};
+            matchingRows.forEach(row => {
+                const desc = row['Descriptor'] || 'Unknown';
+                if (!descMap[desc]) {
+                    descMap[desc] = {
+                        'Descriptor': desc,
+                        'Goal For': 0,
+                        'Chance For': 0,
+                        'Goal Against': 0,
+                        'Chance Against': 0
+                    };
+                }
+                descMap[desc]['Goal For'] += Number(row['Goal For']) || 0;
+                descMap[desc]['Chance For'] += Number(row['Chance For']) || 0;
+                descMap[desc]['Goal Against'] += Number(row['Goal Against']) || 0;
+                descMap[desc]['Chance Against'] += Number(row['Chance Against']) || 0;
+            });
+
+            const displayRows = Object.values(descMap).sort((a, b) => (b['Goal For'] + b['Chance For']) - (a['Goal For'] + a['Chance For']));
 
             const headers = Object.keys(displayRows[0]);
             const headerTr = document.getElementById('modalTableHeader');
@@ -1440,6 +1501,7 @@
         function renderTeamCharts() {
             if (teamChart1Instance) teamChart1Instance.destroy();
             if (teamChart2Instance) teamChart2Instance.destroy();
+            if (teamChart3Instance) teamChart3Instance.destroy();
 
             const teamsData = [...workbookData.teamsRaw];
             teamsData.sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0));
@@ -1452,6 +1514,11 @@
 
             const netXgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('net xg')) || "Net xG (xG - Opponent's xG)";
             const netXg = teamsData.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
+
+            const foPctKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('faceoffs won, %')) || 'FACEOFFS WON, %';
+            const sortedByFo = [...teamsData].sort((a, b) => (Number(b[foPctKey]) || 0) - (Number(a[foPctKey]) || 0));
+            const foLabels = sortedByFo.map(d => d['Team']);
+            const foValues = sortedByFo.map(d => Number(d[foPctKey]) || 0);
 
             teamChart1Instance = new Chart(document.getElementById('teamChart1').getContext('2d'), {
                 type: 'bar',
@@ -1502,14 +1569,36 @@
                     }
                 }
             });
+
+            teamChart3Instance = new Chart(document.getElementById('teamChart3').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: foLabels,
+                    datasets: [
+                        { label: 'Faceoffs Won (%)', data: foValues, backgroundColor: '#f59e0b' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 11 } } },
+                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 10, weight: 'bold' }, formatter: (v) => v + '%' }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 10 } } },
+                        y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' } }
+                    }
+                }
+            });
         }
 
         function renderChancesPlayerCharts() {
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            document.getElementById('chanceChart1Title').innerText = "Luleå Pelaajat: 5v5 Net Score (Maalit & Paikat)";
-            document.getElementById('chanceChart2Title').innerText = "Luleå Pelaajat: Maalit (Goal For vs Against)";
+            document.getElementById('chanceChart1Title').innerText = "Luleå Players: 5v5 Net Score (Goals & Chances)";
+            document.getElementById('chanceChart2Title').innerText = "Luleå Players: Goals (Goal For vs Against)";
 
             const sorted = [...currentFilteredData].sort((a, b) => b['5v5 Net Score'] - a['5v5 Net Score']).slice(0, 10);
             const labels = sorted.map(d => d['Name']);
@@ -1561,14 +1650,14 @@
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            document.getElementById('chanceChart1Title').innerText = "Alueet & Pelitavat: Maalipaikat (Chance For vs Against)";
-            document.getElementById('chanceChart2Title').innerText = "Alueet & Pelitavat: Maalit (Goal For vs Against)";
+            document.getElementById('chanceChart1Title').innerText = "Areas & Play Styles: Scoring Chances (Chance For vs Against)";
+            document.getElementById('chanceChart2Title').innerText = "Areas & Play Styles: Goals (Goal For vs Against)";
 
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: currentFilteredData.map(d => d['Kategoria / Alue']),
+                    labels: currentFilteredData.map(d => d['Category / Area']),
                     datasets: [
                         { label: 'Chance For', data: currentFilteredData.map(d => d['Chance For']), backgroundColor: '#3b82f6' },
                         { label: 'Chance Against', data: currentFilteredData.map(d => d['Chance Against']), backgroundColor: '#ef4444' }
@@ -1588,7 +1677,7 @@
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: currentFilteredData.map(d => d['Kategoria / Alue']),
+                    labels: currentFilteredData.map(d => d['Category / Area']),
                     datasets: [
                         { label: 'Goal For', data: currentFilteredData.map(d => d['Goal For']), backgroundColor: '#10b981' },
                         { label: 'Goal Against', data: currentFilteredData.map(d => d['Goal Against']), backgroundColor: '#f59e0b' }
