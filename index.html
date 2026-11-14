@@ -639,7 +639,6 @@
                 numToPlayer[String(p['Shirt number']).trim()] = p['Player'];
             });
 
-            // Kerätään pelit ja yhdistetään niihin Opponent ja Date Team- tai Players-datasta
             const gameInfoMap = {};
             workbookData.chancesTeamRaw.forEach(row => {
                 if (row['Game']) {
@@ -1571,10 +1570,24 @@
             const netXgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('net xg')) || "Net xG (xG - Opponent's xG)";
             const netXg = teamsData.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
 
-            const foPctKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('faceoffs won, %')) || 'FACEOFFS WON, %';
-            const sortedByFo = [...teamsData].sort((a, b) => (Number(b[foPctKey]) || 0) - (Number(a[foPctKey]) || 0));
+            // Korjattu hakulogiikka Faceoff-prosentille (etsii joustavasti oikean avaimen)
+            const sampleRow = teamsData[0] || {};
+            const foPctKey = Object.keys(sampleRow).find(k => {
+                const upper = k.toUpperCase();
+                return upper.includes('FACEOFFS WON') || upper.includes('FACE-OFF') || upper.includes('FO %');
+            }) || 'FACEOFFS WON, %';
+
+            const sortedByFo = [...teamsData].sort((a, b) => {
+                let vA = parseFloat(String(a[foPctKey]).replace('%', '')) || 0;
+                let vB = parseFloat(String(b[foPctKey]).replace('%', '')) || 0;
+                return vB - vA;
+            });
+
             const foLabels = sortedByFo.map(d => d['Team']);
-            const foValues = sortedByFo.map(d => Number(d[foPctKey]) || 0);
+            const foValues = sortedByFo.map(d => {
+                let val = parseFloat(String(d[foPctKey]).replace('%', ''));
+                return isNaN(val) ? 0 : val;
+            });
 
             teamChart1Instance = new Chart(document.getElementById('teamChart1').getContext('2d'), {
                 type: 'bar',
@@ -1746,7 +1759,7 @@
                         datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
                     },
                     scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } }
-                    }
+                }
             });
         }
 
