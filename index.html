@@ -64,6 +64,7 @@
             <button onclick="switchTab('teams')" id="tabTeams" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Team Stats</button>
             <button onclick="switchTab('lines')" id="tabLines" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Forward Lines</button>
             <button onclick="switchTab('chances')" id="tabChances" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Scoring Chances</button>
+            <button onclick="switchTab('trends')" id="tabTrends" class="px-4 py-1.5 text-xs font-bold uppercase rounded bg-slate-900 text-slate-300 hover:bg-slate-800 transition whitespace-nowrap">Trends & Averages</button>
         </div>
     </header>
 
@@ -109,6 +110,23 @@
                 <select id="filterChancesGamesMulti" multiple class="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-1.5 h-20 focus:outline-none custom-scrollbar">
                 </select>
                 <p class="text-[9px] text-slate-400 mt-0.5">Tyhjä = Kaikki pelit yhteensä.</p>
+            </div>
+        </div>
+
+        <!-- Trends Välilehden Sisältö -->
+        <div id="trendsSection" class="space-y-6" style="display: none;">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
+                <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                    <div>
+                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game Scoring Chances Trend & Averages</h2>
+                        <p class="text-xs text-slate-400">Total For vs Total Against across all played games with average lines</p>
+                    </div>
+                    <div id="trendStatsSummary" class="flex gap-4 text-xs font-semibold text-slate-300 bg-slate-950 px-4 py-2 rounded border border-slate-800">
+                    </div>
+                </div>
+                <div class="relative h-[450px] w-full">
+                    <canvas id="trendChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -296,6 +314,7 @@
         let compareChartInstance = null;
         let chanceChart1Instance = null;
         let chanceChart2Instance = null;
+        let trendChartInstance = null;
 
         const categoryOrder = ['OZ', 'Rush', 'Turnovers', 'Takeaways', 'PP', 'Period 1', 'Period 2', 'Period 3', 'OT', 'Others'];
 
@@ -497,6 +516,8 @@
             buildChancesData();
             if (currentTab === 'chances') {
                 renderCurrentView();
+            } else if (currentTab === 'trends') {
+                renderTrendsView();
             }
         }
 
@@ -591,7 +612,6 @@
                 numToPlayer[String(p['Shirt number']).trim()] = p['Player'];
             });
 
-            // Kerätään uniikit pelit chances-datasta
             const gamesSet = new Set();
             workbookData.chancesPlayersRaw.forEach(row => {
                 if (row['Game']) gamesSet.add(String(row['Game']));
@@ -725,7 +745,7 @@
         function switchTab(tabName) {
             currentTab = tabName;
             
-            const tabs = ['players', 'compare', 'faceoffs', 'teams', 'lines', 'chances'];
+            const tabs = ['players', 'compare', 'faceoffs', 'teams', 'lines', 'chances', 'trends'];
             tabs.forEach(t => {
                 const btn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
                 if (btn) {
@@ -733,12 +753,13 @@
                 }
             });
 
-            document.getElementById('tableSection').style.display = (tabName === 'compare') ? 'none' : 'block';
+            document.getElementById('tableSection').style.display = (tabName === 'compare' || tabName === 'trends') ? 'none' : 'block';
             document.getElementById('comparisonSection').style.display = (tabName === 'compare') ? 'block' : 'none';
+            document.getElementById('trendsSection').style.display = (tabName === 'trends') ? 'block' : 'none';
             document.getElementById('chancesFiltersBar').style.display = (tabName === 'chances') ? 'grid' : 'none';
 
             document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
-            document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare' || tabName === 'chances') ? 'none' : 'block';
+            document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare' || tabName === 'chances' || tabName === 'trends') ? 'none' : 'block';
             
             document.getElementById('chartsContainer').style.display = (tabName === 'players') ? 'grid' : 'none';
             document.getElementById('teamChartsContainer').style.display = (tabName === 'teams') ? 'grid' : 'none';
@@ -788,7 +809,7 @@
                 currentFilteredData = data;
                 renderTable();
             } else if (currentTab === 'chances') {
-                buildChancesData(); // Päivitetään pelifiltterin mukaan
+                buildChancesData();
                 if (chancesSub === 'players') {
                     document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Pelaajien tilastot (5v5 Net Score)";
                     const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
@@ -835,7 +856,78 @@
                     renderTable();
                     renderChancesTeamCharts();
                 }
+            } else if (currentTab === 'trends') {
+                renderTrendsView();
             }
+        }
+
+        function renderTrendsView() {
+            if (trendChartInstance) trendChartInstance.destroy();
+
+            // Lasketaan pelikohtaiset Total For ja Total Against Team-sheetistä tai Chances Team -datasta
+            // Jokaiselle pelille (Game):
+            // Total For = sum(Goal For + Goal For inv + Chance For + Chance For inv) tai vastaava team-tasolla
+            const gameMap = {};
+            
+            if (workbookData.chancesTeamRaw.length > 0) {
+                workbookData.chancesTeamRaw.forEach(row => {
+                    const g = String(row['Game']);
+                    if (!g || g === 'undefined') return;
+                    if (!gameMap[g]) {
+                        gameMap[g] = { game: g, totalFor: 0, totalAgainst: 0 };
+                    }
+                    const gf = Number(row['Goal For']) || 0;
+                    const gfi = Number(row['Goal For inv']) || 0;
+                    const cf = Number(row['Chance For']) || 0;
+                    const cfi = Number(row['Chance For inv']) || 0;
+                    const ga = Number(row['Goal Against']) || 0;
+                    const ca = Number(row['Chance Against']) || 0;
+
+                    gameMap[g].totalFor += (gf + gfi + cf + cfi);
+                    gameMap[g].totalAgainst += (ga + ca);
+                });
+            }
+
+            const gamesArr = Object.values(gameMap).sort((a,b) => Number(a.game) - Number(b.game));
+            const labels = gamesArr.map(item => `Peli ${item.game}`);
+            const dataFor = gamesArr.map(item => item.totalFor);
+            const dataAgainst = gamesArr.map(item => item.totalAgainst);
+
+            const avgFor = dataFor.length > 0 ? (dataFor.reduce((a,b)=>a+b,0) / dataFor.length).toFixed(1) : 0;
+            const avgAgainst = dataAgainst.length > 0 ? (dataAgainst.reduce((a,b)=>a+b,0) / dataAgainst.length).toFixed(1) : 0;
+
+            document.getElementById('trendStatsSummary').innerHTML = `
+                <span>Pelit yhteensä: <strong class="text-white">${gamesArr.length}</strong></span>
+                <span>Avg Total For: <strong class="text-blue-400">${avgFor}</strong></span>
+                <span>Avg Total Against: <strong class="text-rose-400">${avgAgainst}</strong></span>
+            `;
+
+            // Keskiarvoviivat datasetetteihin
+            const avgForArr = gamesArr.map(() => Number(avgFor));
+            const avgAgainstArr = gamesArr.map(() => Number(avgAgainst));
+
+            trendChartInstance = new Chart(document.getElementById('trendChart').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Total For', data: dataFor, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, tension: 0.1 },
+                        { label: 'Total Against', data: dataAgainst, borderColor: '#ef4444', backgroundColor: '#ef4444', borderWidth: 2, tension: 0.1 },
+                        { label: 'Avg For', data: avgForArr, borderColor: '#3b82f6', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: 'Avg Against', data: avgAgainstArr, borderColor: '#ef4444', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 11 } } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } },
+                        y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } }
+                    }
+                }
+            });
         }
 
         function updatePlayerComparison() {
@@ -1499,7 +1591,6 @@
                     labels: currentFilteredData.map(d => d['Kategoria / Alue']),
                     datasets: [
                         { label: 'Goal For', data: currentFilteredData.map(d => d['Goal For']), backgroundColor: '#10b981' },
-                        { label: 'Goal Against', data: currentFilteredData.pop ? currentFilteredData.map(d => d['Goal Against']) : [] }, // safe map
                         { label: 'Goal Against', data: currentFilteredData.map(d => d['Goal Against']), backgroundColor: '#f59e0b' }
                     ]
                 },
