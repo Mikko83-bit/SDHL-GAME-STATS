@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -130,7 +131,7 @@
             </div>
         </div>
 
-        <!-- Charts / Comparisons (Player Stats) -->
+        <!-- Charts / Comparisons (Player Stats) - Updated order: 1. Goals vs xG, 2. Top Game Score / 60, 3. Dynamic Sorted Metric -->
         <div id="chartsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
                 <h3 id="chart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals vs Expected Goals (xG)</h3>
@@ -139,13 +140,13 @@
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Shots & CORSI metrics</h3>
+                <h3 id="chart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Top Game Score / 60</h3>
                 <div class="relative h-72">
                     <canvas id="chart2"></canvas>
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chart3Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Top Game Score / 60</h3>
+                <h3 id="chart3Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Dynamic Metric (Sorted by Table)</h3>
                 <div class="relative h-72">
                     <canvas id="chart3"></canvas>
                 </div>
@@ -1207,8 +1208,10 @@
 
             renderTable();
 
-            // Jos ollaan Team Stats -näkymässä, päivitetään kolmas kaavio suoraan klikatun sarakkeen mukaiseksi!
-            if (currentTab === 'teams') {
+            // Päivitetään pelaajien tai joukkueiden kolmas graafi klikatun sarakkeen mukaan
+            if (currentTab === 'players') {
+                renderCharts(document.getElementById('gameFilter').value, document.getElementById('teamFilter').value, column);
+            } else if (currentTab === 'teams') {
                 renderTeamCharts(column);
             }
         }
@@ -1496,15 +1499,14 @@
             document.getElementById('playerModal').classList.add('hidden');
         }
 
-        function renderCharts(selectedGame, selectedTeam) {
+        function renderCharts(selectedGame, selectedTeam, sortCol = null) {
             if (chart1Instance) chart1Instance.destroy();
             if (chart2Instance) chart2Instance.destroy();
             if (chart3Instance) chart3Instance.destroy();
 
             if (selectedGame === 'all') {
                 document.getElementById('chart1Title').innerText = "Goals vs Expected Goals (xG)";
-                document.getElementById('chart2Title').innerText = "Shots & CORSI metrics";
-                document.getElementById('chart3Title').innerText = "Top Game Score / 60";
+                document.getElementById('chart2Title').innerText = "Top Game Score / 60";
 
                 const sortedByGoals = [...currentFilteredData].sort((a, b) => (Number(b['Goals']) || 0) - (Number(a['Goals']) || 0)).slice(0, 10);
                 const labels1 = sortedByGoals.map(d => d['Player']);
@@ -1529,15 +1531,15 @@
                     }
                 });
 
-                const sortedByCorsi = [...currentFilteredData].sort((a, b) => (Number(b['CORSI']) || 0) - (Number(a['CORSI']) || 0)).slice(0, 10);
-                const labels2 = sortedByCorsi.map(d => d['Player']);
+                const sortedByGS60 = [...currentFilteredData].sort((a, b) => (Number(b['Game Score / 60']) || 0) - (Number(a['Game Score / 60']) || 0)).slice(0, 10);
+                const labels2 = sortedByGS60.map(d => d['Player']);
 
                 chart2Instance = new Chart(document.getElementById('chart2').getContext('2d'), {
                     type: 'bar',
                     plugins: [ChartDataLabels],
                     data: {
                         labels: labels2,
-                        datasets: [{ label: 'CORSI', data: sortedByCorsi.map(d => Number(d['CORSI']) || 0), backgroundColor: '#10b981' }]
+                        datasets: [{ label: 'Game Score / 60', data: sortedByGS60.map(d => Number(d['Game Score / 60']) || 0), backgroundColor: '#f59e0b' }]
                     },
                     options: {
                         responsive: true, maintainAspectRatio: false,
@@ -1549,23 +1551,44 @@
                     }
                 });
 
-                const sortedByGS60 = [...currentFilteredData].sort((a, b) => (Number(b['Game Score / 60']) || 0) - (Number(a['Game Score / 60']) || 0)).slice(0, 10);
-                const labels3 = sortedByGS60.map(d => d['Player']);
+                // 3. Kolmas kaavio (dynaaminen, sijoitettu viimeiseksi)
+                let activeCol = sortCol;
+                if (!activeCol || ['TEAM', 'SHIRT NUMBER', 'PLAYER', 'POSITION', 'Team', 'Shirt number', 'Player', 'Position'].includes(activeCol)) {
+                    activeCol = 'POINTS';
+                }
+
+                document.getElementById('chart3Title').innerText = `Top 10: ${activeCol} (Sorted by Table)`;
+
+                const sortedByCol = [...currentFilteredData].sort((a, b) => {
+                    let valA = parseFloat(String(a[activeCol] || 0).replace('%', '')) || 0;
+                    let valB = parseFloat(String(b[activeCol] || 0).replace('%', '')) || 0;
+                    return isAscending ? valA - valB : valB - valA;
+                }).slice(0, 10);
+
+                const colLabels = sortedByCol.map(d => d['Player'] || d['Name'] || 'Player');
+                const colValues = sortedByCol.map(d => {
+                    let val = parseFloat(String(d[activeCol] || 0).replace('%', ''));
+                    return isNaN(val) ? 0 : Number(val.toFixed(2));
+                });
+                const isPct = String(activeCol).includes('%');
 
                 chart3Instance = new Chart(document.getElementById('chart3').getContext('2d'), {
                     type: 'bar',
                     plugins: [ChartDataLabels],
                     data: {
-                        labels: labels3,
-                        datasets: [{ label: 'Game Score / 60', data: sortedByGS60.map(d => Number(d['Game Score / 60']) || 0), backgroundColor: '#f59e0b' }]
+                        labels: colLabels,
+                        datasets: [{ label: activeCol, data: colValues, backgroundColor: '#10b981' }]
                     },
                     options: {
                         responsive: true, maintainAspectRatio: false,
                         plugins: {
                             legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
-                            datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                            datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 }, formatter: (v) => isPct ? v + '%' : v }
                         },
-                        scales: { x: { ticks: { color: '#94a3b8', font: { size: 9 } } }, y: { ticks: { color: '#94a3b8' } } }
+                        scales: { 
+                            x: { ticks: { color: '#94a3b8', font: { size: 8, maxRotation: 45, minRotation: 45 } } }, 
+                            y: { ticks: { color: '#94a3b8', callback: (v) => isPct ? v + '%' : v } } 
+                        }
                     }
                 });
 
@@ -1666,7 +1689,6 @@
 
             const teamsData = [...workbookData.teamsRaw];
 
-            // 1. Kaavio: Goals vs Expected Goals
             teamsData.sort((a, b) => (Number(b['GOALS'] || b['Goals']) || 0) - (Number(a['GOALS'] || a['Goals']) || 0));
             const labels = teamsData.map(d => d['TEAM'] || d['Team']);
             const goals = teamsData.map(d => Number(d['GOALS'] || d['Goals']) || 0);
@@ -1696,7 +1718,6 @@
                 }
             });
 
-            // 2. Kaavio: Net xG
             const netXgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('net xg')) || "NET XG (XG - OPPONENT'S XG)";
             const sortedByNetXg = [...teamsData].sort((a, b) => (Number(b[netXgKey]) || 0) - (Number(a[netXgKey]) || 0));
             const netLabels = sortedByNetXg.map(d => d['TEAM'] || d['Team']);
@@ -1725,7 +1746,6 @@
                 }
             });
 
-            // 3. Dynaaminen / Kolmas kaavio (vaihtuu sen mukaan mitä saraketta klikataan tai oletuksena Faceoffs Won %)
             let activeCol = sortCol;
             if (!activeCol || activeCol === 'TEAM' || activeCol === 'Team') {
                 activeCol = Object.keys(teamsData[0] || {}).find(k => k.toUpperCase().includes('FACEOFFS WON, %')) || 'FACEOFFS WON, %';
