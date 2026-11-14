@@ -407,10 +407,8 @@
             const upper = d.toUpperCase();
             const lower = d.toLowerCase();
 
-            // PP: kaikki joissa alussa PP (tai sisältää PP)
             if (upper.startsWith('PP') || upper.includes('PP ')) return 'PP';
 
-            // OZ tarkka listaus
             const ozList = [
                 'OZ 1 area', 'OZ 2 area', 'OZ reb', 'Oz reb', 
                 'OZ crash the net', 'OZ rr pass', 'OZ tip', 
@@ -418,22 +416,15 @@
             ];
             if (ozList.some(item => item.toLowerCase() === lower)) return 'OZ';
 
-            // Rush
             if (upper.includes('RUSH')) return 'Rush';
-
-            // Turnovers (sisältää turnover tai t over)
             if (lower.includes('turnover') || lower.includes('t over')) return 'Turnovers';
-
-            // Takeaways (alkaa TA tai sisältää ta)
             if (upper.startsWith('TA') || upper.includes('TA ')) return 'Takeaways';
 
-            // Periodit
             if (upper.includes('PERIOD 1')) return 'Period 1';
             if (upper.includes('PERIOD 2')) return 'Period 2';
             if (upper.includes('PERIOD 3')) return 'Period 3';
             if (upper.includes('OT') || upper.includes('OVERTIME')) return 'OT';
 
-            // Others: empty net, PK, Faceoff
             if (lower === 'empty net' || lower === 'pk' || lower === 'faceoff') return 'Others';
 
             return 'Others';
@@ -535,10 +526,18 @@
 
             if (workbook.Sheets['Players']) {
                 workbookData.chancesPlayersRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Players'], { defval: 0 });
+                workbookData.chancesPlayersRaw.forEach(row => {
+                    if (row['Date']) row['Date'] = formatExcelDate(row['Date']);
+                    if (row['Opponent']) row['Opponent'] = normalizeTeamName(row['Opponent']);
+                });
             }
 
             if (workbook.Sheets['Team']) {
                 workbookData.chancesTeamRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Team'], { defval: 0 });
+                workbookData.chancesTeamRaw.forEach(row => {
+                    if (row['Date']) row['Date'] = formatExcelDate(row['Date']);
+                    if (row['Opponent']) row['Opponent'] = normalizeTeamName(row['Opponent']);
+                });
             }
 
             buildChancesData();
@@ -640,6 +639,25 @@
                 numToPlayer[String(p['Shirt number']).trim()] = p['Player'];
             });
 
+            // Kerätään pelit ja yhdistetään niihin Opponent ja Date Team- tai Players-datasta
+            const gameInfoMap = {};
+            workbookData.chancesTeamRaw.forEach(row => {
+                if (row['Game']) {
+                    gameInfoMap[String(row['Game'])] = {
+                        opponent: row['Opponent'] || '',
+                        date: row['Date'] || ''
+                    };
+                }
+            });
+            workbookData.chancesPlayersRaw.forEach(row => {
+                if (row['Game'] && !gameInfoMap[String(row['Game'])]) {
+                    gameInfoMap[String(row['Game'])] = {
+                        opponent: row['Opponent'] || '',
+                        date: row['Date'] || ''
+                    };
+                }
+            });
+
             const gamesSet = new Set();
             workbookData.chancesPlayersRaw.forEach(row => {
                 if (row['Game']) gamesSet.add(String(row['Game']));
@@ -649,7 +667,11 @@
             const selectGame = document.getElementById('filterChancesGamesMulti');
             if (selectGame) {
                 const curSelected = Array.from(selectGame.selectedOptions).map(o => o.value);
-                selectGame.innerHTML = gamesArray.map(g => `<option value="${g}">Game ${g}</option>`).join('');
+                selectGame.innerHTML = gamesArray.map(g => {
+                    const info = gameInfoMap[g];
+                    const label = (info && info.opponent && info.date) ? `Game ${g} (${info.opponent} - ${info.date})` : `Game ${g}`;
+                    return `<option value="${g}">${label}</option>`;
+                }).join('');
                 Array.from(selectGame.options).forEach(opt => {
                     if (curSelected.includes(opt.value)) opt.selected = true;
                 });
@@ -892,6 +914,16 @@
         function renderTrendsView() {
             if (trendChartInstance) trendChartInstance.destroy();
 
+            const gameInfoMap = {};
+            workbookData.chancesTeamRaw.forEach(row => {
+                if (row['Game']) {
+                    gameInfoMap[String(row['Game'])] = {
+                        opponent: row['Opponent'] || '',
+                        date: row['Date'] || ''
+                    };
+                }
+            });
+
             const validCats = ['OZ', 'Rush', 'Turnovers', 'Takeaways'];
             const gameMap = {};
 
@@ -916,7 +948,10 @@
             });
 
             const gamesArr = Object.values(gameMap).sort((a, b) => Number(a.game) - Number(b.game));
-            const labels = gamesArr.map(item => `Game ${item.game}`);
+            const labels = gamesArr.map(item => {
+                const info = gameInfoMap[item.game];
+                return (info && info.opponent && info.date) ? `Game ${item.game} (${info.opponent} - ${info.date})` : `Game ${item.game}`;
+            });
             const dataFor = gamesArr.map(item => item.totalFor);
             const dataAgainst = gamesArr.map(item => item.totalAgainst);
 
@@ -949,7 +984,7 @@
                         legend: { labels: { color: '#cbd5e1', font: { size: 11 } } }
                     },
                     scales: {
-                        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } },
+                        x: { ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 45, minRotation: 45 } },
                         y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } }
                     }
                 }
@@ -1270,8 +1305,10 @@
             const displayRows = playerRows.map(r => {
                 const forSum = Number(r['Goal For']||0) + Number(r['Goal For inv']||0) + Number(r['Chance For']||0) + Number(r['Chance For inv']||0);
                 const agSum = Number(r['Goal Against']||0) + Number(r['Chance Against']||0);
+                const gNum = r['Game'] || '-';
+                const opp = r['Opponent'] ? ` (${r['Opponent']})` : '';
                 return {
-                    'Game': r['Game'],
+                    'Game': `Game ${gNum}${opp}`,
                     'Goal For': r['Goal For'],
                     'Goal For inv': r['Goal For inv'],
                     'Chance For': r['Chance For'],
@@ -1709,7 +1746,7 @@
                         datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
                     },
                     scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } }
-                }
+                    }
             });
         }
 
