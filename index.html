@@ -1570,12 +1570,12 @@
             const netXgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('net xg')) || "Net xG (xG - Opponent's xG)";
             const netXg = teamsData.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
 
-            // Korjattu hakulogiikka Faceoff-prosentille (etsii joustavasti oikean avaimen)
+            // Etsitään tarkasti Faceoffs won, % -avain (tukee myös rivinvaihtoa ja pilkkua)
             const sampleRow = teamsData[0] || {};
             const foPctKey = Object.keys(sampleRow).find(k => {
-                const upper = k.toUpperCase();
-                return upper.includes('FACEOFFS WON') || upper.includes('FACE-OFF') || upper.includes('FO %');
-            }) || 'FACEOFFS WON, %';
+                const norm = k.replace(/\s+/g, '').toLowerCase();
+                return norm.includes('faceoffswon') || norm.includes('facewon');
+            }) || 'Faceoffs won, %';
 
             const sortedByFo = [...teamsData].sort((a, b) => {
                 let vA = parseFloat(String(a[foPctKey]).replace('%', '')) || 0;
