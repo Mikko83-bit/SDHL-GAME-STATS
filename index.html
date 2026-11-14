@@ -276,15 +276,23 @@
 
     <!-- Player / Category Game History Modal -->
     <div id="playerModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
             <div class="bg-slate-950 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
                 <div>
                     <h3 id="modalPlayerName" class="text-lg font-bold text-white">Details</h3>
-                    <p id="modalSubtitle" class="text-xs text-red-400">Detailed breakdown</p>
+                    <p id="modalSubtitle" class="text-xs text-red-400">Detailed breakdown & radar comparison</p>
                 </div>
                 <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 py-1">&times;</button>
             </div>
-            <div class="p-4 overflow-x-auto custom-scrollbar flex-1">
+            
+            <!-- Radar Chart Container inside Modal -->
+            <div class="p-4 bg-slate-950/50 border-b border-slate-800 flex justify-center items-center">
+                <div class="relative h-64 w-full max-w-md">
+                    <canvas id="playerRadarChart"></canvas>
+                </div>
+            </div>
+
+            <div class="p-4 overflow-x-auto custom-scrollbar flex-1 max-h-[40vh]">
                 <table class="w-full text-left border-collapse text-xs whitespace-nowrap">
                     <thead id="modalTableHeader" class="bg-slate-950 text-slate-400 uppercase text-[10px] sticky top-0"></thead>
                     <tbody id="modalTableBody" class="divide-y divide-slate-800/60"></tbody>
@@ -322,6 +330,7 @@
         let chanceChart1Instance = null;
         let chanceChart2Instance = null;
         let trendChartInstance = null;
+        let playerRadarInstance = null;
 
         const categoryOrder = ['OZ', 'Rush', 'Turnovers', 'Takeaways', 'PP', 'Period 1', 'Period 2', 'Period 3', 'OT', 'Others'];
 
@@ -1264,10 +1273,12 @@
 
         function openPlayerModal(playerName) {
             document.getElementById('modalPlayerName').innerText = `Player: ${playerName}`;
-            document.getElementById('modalSubtitle').innerText = "Game-by-game statistics during the season";
+            document.getElementById('modalSubtitle').innerText = "Game-by-game statistics & league comparison radar";
+            
             const playerGames = workbookData.playersRaw.filter(row => row['Player'] === playerName);
-
             if (playerGames.length === 0) return;
+
+            renderPlayerRadarChart(playerName);
 
             const headers = Object.keys(playerGames[0]);
             const headerTr = document.getElementById('modalTableHeader');
@@ -1283,10 +1294,96 @@
             document.getElementById('playerModal').classList.remove('hidden');
         }
 
+        function renderPlayerRadarChart(playerName) {
+            if (playerRadarInstance) playerRadarInstance.destroy();
+
+            const pAgg = workbookData.playersAggregated.find(p => p['Player'] === playerName);
+            if (!pAgg) return;
+
+            const toiSecs = timeToSecs(pAgg['Time on ice'] || '0:00');
+            const hours = toiSecs > 0 ? (toiSecs / 3600) : 1;
+
+            const pGoals = Number(pAgg['Goals'] || 0);
+            const pAssists = Number(pAgg['Assists'] || 0);
+            const pXg = Number(pAgg['xG (Expected goals)'] || pAgg['xG'] || 0);
+            const pShots = Number(pAgg['Shots on goal'] || 0);
+            const pGs = Number(pAgg['Game Score'] || 0);
+            const pCorsi = parseFloat(String(pAgg['CORSI'] || '0').replace('%','')) || 0;
+
+            const pG60 = pGoals / hours;
+            const pA60 = pAssists / hours;
+            const pXg60 = pXg / hours;
+            const pShots60 = pShots / hours;
+            const pGs60 = pGs / hours;
+
+            let totalG60 = 0, totalA60 = 0, totalXg60 = 0, totalShots60 = 0, totalGs60 = 0, totalCorsi = 0;
+            let count = workbookData.playersAggregated.length;
+
+            workbookData.playersAggregated.forEach(p => {
+                const s = timeToSecs(p['Time on ice'] || '0:00');
+                const h = s > 0 ? (s / 3600) : 1;
+                totalG60 += (Number(p['Goals'] || 0) / h);
+                totalA60 += (Number(p['Assists'] || 0) / h);
+                totalXg60 += (Number(p['xG (Expected goals)'] || p['xG'] || 0) / h);
+                totalShots60 += (Number(p['Shots on goal'] || 0) / h);
+                totalGs60 += (Number(p['Game Score'] || 0) / h);
+                totalCorsi += (parseFloat(String(p['CORSI'] || '0').replace('%','')) || 0);
+            });
+
+            const avgG60 = count > 0 ? totalG60 / count : 0;
+            const avgA60 = count > 0 ? totalA60 / count : 0;
+            const avgXg60 = count > 0 ? totalXg60 / count : 0;
+            const avgShots60 = count > 0 ? totalShots60 / count : 0;
+            const avgGs60 = count > 0 ? totalGs60 / count : 0;
+            const avgCorsi = count > 0 ? totalCorsi / count : 0;
+
+            playerRadarInstance = new Chart(document.getElementById('playerRadarChart').getContext('2d'), {
+                type: 'radar',
+                data: {
+                    labels: ['Goals/60', 'Assists/60', 'xG/60', 'Shots/60', 'Game Score/60', 'Corsi %'],
+                    datasets: [
+                        {
+                            label: playerName,
+                            data: [Number(pG60.toFixed(2)), Number(pA60.toFixed(2)), Number(pXg60.toFixed(2)), Number(pShots60.toFixed(2)), Number(pGs60.toFixed(2)), pCorsi],
+                            backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                            borderColor: '#ef4444',
+                            pointBackgroundColor: '#ef4444',
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'League Avg',
+                            data: [Number(avgG60.toFixed(2)), Number(avgA60.toFixed(2)), Number(avgXg60.toFixed(2)), Number(avgShots60.toFixed(2)), Number(avgGs60.toFixed(2)), Number(avgCorsi.toFixed(1))],
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderColor: '#3b82f6',
+                            pointBackgroundColor: '#3b82f6',
+                            borderWidth: 1.5,
+                            borderDash: [4, 4]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } }
+                    },
+                    scales: {
+                        r: {
+                            grid: { color: '#334155' },
+                            angleLines: { color: '#334155' },
+                            pointLabels: { color: '#94a3b8', font: { size: 10, weight: 'bold' } },
+                            ticks: { display: false, backdropColor: 'transparent' }
+                        }
+                    }
+                }
+            });
+        }
+
         function openChancesPlayerModal(playerName) {
             document.getElementById('modalPlayerName').innerText = `Scoring Chances: ${playerName}`;
             document.getElementById('modalSubtitle').innerText = "Game-by-game scoring chances breakdown";
             
+            if (playerRadarInstance) { playerRadarInstance.destroy(); playerRadarInstance = null; }
+
             const playerRows = workbookData.chancesPlayersRaw.filter(row => {
                 const num = String(row['Number']).trim();
                 const numToPlayer = {};
@@ -1342,6 +1439,8 @@
             document.getElementById('modalPlayerName').innerText = `Category Breakdown: ${categoryName}`;
             document.getElementById('modalSubtitle').innerText = "Detailed sub-descriptors breakdown";
 
+            if (playerRadarInstance) { playerRadarInstance.destroy(); playerRadarInstance = null; }
+
             const matchingRows = workbookData.chancesTeamRaw.filter(row => {
                 return getDescriptorCategory(row['Descriptor']) === categoryName;
             });
@@ -1387,6 +1486,7 @@
 
         function closeModal() {
             document.getElementById('modalPlayerName').innerText = '';
+            if (playerRadarInstance) { playerRadarInstance.destroy(); playerRadarInstance = null; }
             document.getElementById('playerModal').classList.add('hidden');
         }
 
@@ -1570,23 +1670,54 @@
             const netXgKey = Object.keys(teamsData[0] || {}).find(k => k.toLowerCase().includes('net xg')) || "Net xG (xG - Opponent's xG)";
             const netXg = teamsData.map(d => Number(Number(d[netXgKey] || 0).toFixed(2)));
 
-            // Etsitään tarkasti Faceoffs won, % -avain (tukee myös rivinvaihtoa ja pilkkua)
+            // Joustava haku faceoff-prosenttisarakkeelle
             const sampleRow = teamsData[0] || {};
-            const foPctKey = Object.keys(sampleRow).find(k => {
-                const norm = k.replace(/\s+/g, '').toLowerCase();
-                return norm.includes('faceoffswon') || norm.includes('facewon');
-            }) || 'Faceoffs won, %';
+            const keys = Object.keys(sampleRow);
+            const foKey = keys.find(k => {
+                const norm = k.toLowerCase().replace(/[\s,\.%]/g, '');
+                return norm.includes('faceoffwon') || norm.includes('facewon') || norm.includes('fo');
+            });
+
+            // Vaihtoehtoisesti etsitään erikseen voitot ja häviöt jos prosenttia ei suoraan löydy
+            const foWonKey = keys.find(k => {
+                const norm = k.toLowerCase().replace(/[\s,\.%]/g, '');
+                return norm.includes('faceoffswon') || (norm.includes('won') && !norm.includes('%'));
+            });
+            const foLostKey = keys.find(k => {
+                const norm = k.toLowerCase().replace(/[\s,\.%]/g, '');
+                return norm.includes('faceoffslost') || norm.includes('lost');
+            });
 
             const sortedByFo = [...teamsData].sort((a, b) => {
-                let vA = parseFloat(String(a[foPctKey]).replace('%', '')) || 0;
-                let vB = parseFloat(String(b[foPctKey]).replace('%', '')) || 0;
-                return vB - vA;
+                let valA = 0, valB = 0;
+                if (foKey && a[foKey] !== undefined) {
+                    valA = parseFloat(String(a[foKey]).replace('%', '')) || 0;
+                } else if (foWonKey && foLostKey) {
+                    let wA = Number(a[foWonKey]) || 0;
+                    let lA = Number(a[foLostKey]) || 0;
+                    valA = (wA + lA) > 0 ? (wA / (wA + lA)) * 100 : 0;
+                }
+                if (foKey && b[foKey] !== undefined) {
+                    valB = parseFloat(String(b[foKey]).replace('%', '')) || 0;
+                } else if (foWonKey && foLostKey) {
+                    let wB = Number(b[foWonKey]) || 0;
+                    let lB = Number(b[foLostKey]) || 0;
+                    valB = (wB + lB) > 0 ? (wB / (wB + lB)) * 100 : 0;
+                }
+                return valB - valA;
             });
 
             const foLabels = sortedByFo.map(d => d['Team']);
             const foValues = sortedByFo.map(d => {
-                let val = parseFloat(String(d[foPctKey]).replace('%', ''));
-                return isNaN(val) ? 0 : val;
+                let val = 0;
+                if (foKey && d[foKey] !== undefined) {
+                    val = parseFloat(String(d[foKey]).replace('%', ''));
+                } else if (foWonKey && foLostKey) {
+                    let w = Number(d[foWonKey]) || 0;
+                    let l = Number(d[foLostKey]) || 0;
+                    val = (w + l) > 0 ? (w / (w + l)) * 100 : 0;
+                }
+                return isNaN(val) ? 0 : Number(val.toFixed(1));
             });
 
             teamChart1Instance = new Chart(document.getElementById('teamChart1').getContext('2d'), {
