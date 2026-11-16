@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -131,7 +130,7 @@
             </div>
         </div>
 
-        <!-- Charts / Comparisons (Player Stats) - Updated order: 1. Goals vs xG, 2. Top Game Score / 60, 3. Dynamic Sorted Metric -->
+        <!-- Charts / Comparisons (Player Stats) -->
         <div id="chartsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
                 <h3 id="chart1Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals vs Expected Goals (xG)</h3>
@@ -738,6 +737,15 @@
                 const forSum = row['Goal For'] + row['Goal For inv'] + row['Chance For'] + row['Chance For inv'];
                 const againstSum = row['Goal Against'] + row['Chance Against'];
                 row['5v5 Net Score'] = forSum - againstSum;
+
+                // Lasketaan 5v5 SC % (maalipaikkaosuus) ja Goal % (maaliosuus)
+                const totalChances = forSum + againstSum;
+                row['5v5 SC %'] = totalChances > 0 ? Number(((forSum / totalChances) * 100).toFixed(1)) + '%' : '0.0%';
+
+                const goalsFor = row['Goal For'] + row['Goal For inv'];
+                const goalsAgainst = row['Goal Against'];
+                const totalGoals = goalsFor + goalsAgainst;
+                row['5v5 Goal %'] = totalGoals > 0 ? Number(((goalsFor / totalGoals) * 100).toFixed(1)) + '%' : '0.0%';
             });
 
             workbookData.chancesPlayersAggregated = Object.values(aggregated);
@@ -870,7 +878,7 @@
             } else if (currentTab === 'chances') {
                 buildChancesData();
                 if (chancesSub === 'players') {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Player Stats (5v5 Net Score)";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Player Stats (5v5 Net Score & Share %)";
                     const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
                     let data = [...workbookData.chancesPlayersAggregated];
                     if (selectedPlayers.length > 0) {
@@ -1208,7 +1216,6 @@
 
             renderTable();
 
-            // Päivitetään pelaajien tai joukkueiden kolmas graafi klikatun sarakkeen mukaan
             if (currentTab === 'players') {
                 renderCharts(document.getElementById('gameFilter').value, document.getElementById('teamFilter').value, column);
             } else if (currentTab === 'teams') {
@@ -1265,6 +1272,8 @@
                                 return `<td class="px-3 py-2 ${stickyClass}" onclick="openChancesPlayerModal('${playerName}')">${val}</td>`;
                             } else if (h === '5v5 Net Score') {
                                 stickyClass = Number(val) > 0 ? 'text-emerald-400 font-bold' : (Number(val) < 0 ? 'text-rose-400 font-bold' : '');
+                            } else if (h === '5v5 SC %' || h === '5v5 Goal %') {
+                                stickyClass = 'text-emerald-400 font-bold';
                             }
                         } else if (currentTab === 'chances' && chancesSub === 'team') {
                             if (h === 'Category / Area') {
@@ -1388,8 +1397,8 @@
         }
 
         function openChancesPlayerModal(playerName) {
-            document.getElementById('modalPlayerName').innerText = `Scoring Chances: ${playerName}`;
-            document.getElementById('modalSubtitle').innerText = "Game-by-game scoring chances breakdown";
+            document.getElementById('modalPlayerName').innerText = `Scoring Chances & Share %: ${playerName}`;
+            document.getElementById('modalSubtitle').innerText = "Game-by-game scoring chances breakdown, SC % and Goal % (including inv)";
             
             if (playerRadarInstance) { playerRadarInstance.destroy(); playerRadarInstance = null; }
 
@@ -1410,23 +1419,28 @@
             const displayRows = playerRows.map(r => {
                 const forSum = Number(r['Goal For']||0) + Number(r['Goal For inv']||0) + Number(r['Chance For']||0) + Number(r['Chance For inv']||0);
                 const agSum = Number(r['Goal Against']||0) + Number(r['Chance Against']||0);
+                const totalC = forSum + agSum;
+                const scPct = totalC > 0 ? ((forSum / totalC) * 100).toFixed(1) + '%' : '0.0%';
+
+                const gFor = Number(r['Goal For']||0) + Number(r['Goal For inv']||0);
+                const gAg = Number(r['Goal Against']||0);
+                const totalG = gFor + gAg;
+                const gPct = totalG > 0 ? ((gFor / totalG) * 100).toFixed(1) + '%' : '0.0%';
+
                 const gNum = r['Game'] || '-';
                 const opp = r['Opponent'] ? ` (${r['Opponent']})` : '';
+
                 return {
                     'Game': `Game ${gNum}${opp}`,
                     'Goal For': r['Goal For'],
                     'Goal For inv': r['Goal For inv'],
                     'Chance For': r['Chance For'],
                     'Chance For inv': r['Chance For inv'],
-                    'PP goal': r['PP goal'],
-                    'PP goal inv': r['PP goal inv'],
-                    'PP chance': r['PP chance'],
-                    'PP chance inv': r['PP chance inv'],
                     'Goal Against': r['Goal Against'],
                     'Chance Against': r['Chance Against'],
-                    'PP goal ag': r['PP goal ag'],
-                    'PP chance ag': r['PP chance ag'],
-                    '5v5 Net Score': forSum - agSum
+                    '5v5 Net Score': forSum - agSum,
+                    '5v5 SC %': scPct,
+                    '5v5 Goal %': gPct
                 };
             });
 
@@ -1437,7 +1451,7 @@
             const tbody = document.getElementById('modalTableBody');
             tbody.innerHTML = displayRows.map(row => {
                 return `<tr class="hover:bg-slate-800/50 transition">` + 
-                    headers.map(h => `<td class="px-3 py-2 text-slate-300">${row[h] !== undefined ? row[h] : '-'}</td>`).join('') +
+                    headers.map(h => `<td class="px-3 py-2 text-slate-300 ${h.includes('%') ? 'text-emerald-400 font-bold' : ''}">${row[h] !== undefined ? row[h] : '-'}</td>`).join('') +
                     `</tr>`;
             }).join('');
 
@@ -1551,7 +1565,6 @@
                     }
                 });
 
-                // 3. Kolmas kaavio (dynaaminen, sijoitettu viimeiseksi)
                 let activeCol = sortCol;
                 if (!activeCol || ['TEAM', 'SHIRT NUMBER', 'PLAYER', 'POSITION', 'Team', 'Shirt number', 'Player', 'Position'].includes(activeCol)) {
                     activeCol = 'POINTS';
