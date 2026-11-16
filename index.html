@@ -119,7 +119,7 @@
                 <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
                     <div>
                         <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game Scoring Chances Trend & Averages (OZ, Rush, Turnovers, Takeaways)</h2>
-                        <p class="text-xs text-slate-400">Total For vs Total Against across played games with average lines</p>
+                        <p class="text-xs text-slate-400">Total For vs Total Against across played games with average lines (excluding period totals to avoid double counting)</p>
                     </div>
                     <div id="trendStatsSummary" class="flex gap-4 text-xs font-semibold text-slate-300 bg-slate-950 px-4 py-2 rounded border border-slate-800">
                     </div>
@@ -285,7 +285,7 @@
                 <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 py-1">&times;</button>
             </div>
             
-            <!-- Yhteenvetokortti (Pelaajan osuus joukkueen paikoista ja maaleista) -->
+            <!-- Yhteenvetokortti -->
             <div id="modalSummaryContainer" class="p-4 bg-slate-950/80 border-b border-slate-800" style="display: none;">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                     <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow">
@@ -306,7 +306,7 @@
                 </div>
             </div>
 
-            <!-- Tavallinen tutka-kaavio (Player Stats -pelaajille) -->
+            <!-- Tavallinen tutka-kaavio -->
             <div id="modalRadarContainer" class="p-4 bg-slate-950/50 border-b border-slate-800 flex justify-center items-center">
                 <div class="relative h-64 w-full max-w-md">
                     <canvas id="playerRadarChart"></canvas>
@@ -458,6 +458,10 @@
             if (lower === 'empty net' || lower === 'pk' || lower === 'faceoff') return 'Others';
 
             return 'Others';
+        }
+
+        function isPeriodCategory(cat) {
+            return ['Period 1', 'Period 2', 'Period 3', 'OT'].includes(cat);
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -754,9 +758,18 @@
                 aggregated[playerName]['PP chance ag'] += Number(row['PP chance ag']) || 0;
             });
 
-            // Lasketaan koko joukkueen yhteissummat vertailua varten
+            // Lasketaan koko joukkueen yhteissummat (jätetään erät pois laskuista duplikaattien välttämiseksi)
             let teamTotalChancesFor = 0;
             let teamTotalGoalsFor = 0;
+
+            workbookData.chancesTeamRaw.forEach(row => {
+                if (selectedGames.length > 0 && !selectedGames.includes(String(row['Game']))) return;
+                const cat = getDescriptorCategory(row['Descriptor']);
+                if (isPeriodCategory(cat)) return; // Jätetään erät pois laskuista!
+
+                teamTotalChancesFor += (Number(row['Goal For']) || 0) + (Number(row['Chance For']) || 0);
+                teamTotalGoalsFor += (Number(row['Goal For']) || 0);
+            });
 
             Object.values(aggregated).forEach(row => {
                 const forSum = row['Goal For'] + row['Goal For inv'] + row['Chance For'] + row['Chance For inv'];
@@ -764,9 +777,6 @@
                 row['5v5 Net Score'] = forSum - againstSum;
                 row['player_for_sum'] = forSum;
                 row['player_goals_for'] = row['Goal For'] + row['Goal For inv'];
-
-                teamTotalChancesFor += forSum;
-                teamTotalGoalsFor += row['player_goals_for'];
             });
 
             Object.values(aggregated).forEach(row => {
@@ -975,7 +985,7 @@
 
             workbookData.chancesTeamRaw.forEach(row => {
                 const descCat = getDescriptorCategory(row['Descriptor']);
-                if (!validCats.includes(descCat)) return;
+                if (!validCats.includes(descCat) || isPeriodCategory(descCat)) return;
 
                 const g = String(row['Game']);
                 if (!g || g === 'undefined' || g === '0') return;
@@ -1449,7 +1459,6 @@
                 return;
             }
 
-            // Lasketaan pelaajan omat totalsummat
             let pGF = 0, pGFI = 0, pCF = 0, pCFI = 0, pGA = 0, pCA = 0;
             playerRows.forEach(r => {
                 pGF += Number(r['Goal For'] || 0);
@@ -1478,7 +1487,6 @@
             const displayRows = playerRows.map(r => {
                 const forSum = Number(r['Goal For']||0) + Number(r['Goal For inv']||0) + Number(r['Chance For']||0) + Number(r['Chance For inv']||0);
                 const agSum = Number(r['Goal Against']||0) + Number(r['Chance Against']||0);
-                
                 const gFor = Number(r['Goal For']||0) + Number(r['Goal For inv']||0);
 
                 const scPct = teamTotalC > 0 ? ((forSum / teamTotalC) * 100).toFixed(1) + '%' : '0.0%';
