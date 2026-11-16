@@ -280,13 +280,34 @@
             <div class="bg-slate-950 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
                 <div>
                     <h3 id="modalPlayerName" class="text-lg font-bold text-white">Details</h3>
-                    <p id="modalSubtitle" class="text-xs text-red-400">Detailed breakdown & radar comparison</p>
+                    <p id="modalSubtitle" class="text-xs text-red-400">Detailed breakdown & summary</p>
                 </div>
                 <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 py-1">&times;</button>
             </div>
             
-            <!-- Radar Chart Container inside Modal -->
-            <div class="p-4 bg-slate-950/50 border-b border-slate-800 flex justify-center items-center">
+            <!-- Yhteenvetokortti tyhjän tilalle (Scoring Chances -modaaleille) -->
+            <div id="modalSummaryContainer" class="p-4 bg-slate-950/80 border-b border-slate-800" style="display: none;">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow">
+                        <div class="text-[10px] uppercase font-bold text-slate-400">5v5 Maalipaikkaosuus (SC %)</div>
+                        <div id="summaryScPct" class="text-2xl font-black text-emerald-400 mt-1">0.0%</div>
+                        <div id="summaryScSub" class="text-[10px] text-slate-400 mt-1">Omat 0 / Vastustaja 0</div>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow">
+                        <div class="text-[10px] uppercase font-bold text-slate-400">5v5 Maaliosuus (Goal %)</div>
+                        <div id="summaryGoalPct" class="text-2xl font-black text-blue-400 mt-1">0.0%</div>
+                        <div id="summaryGoalSub" class="text-[10px] text-slate-400 mt-1">Tehdyt 0 / Päästetyt 0</div>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow">
+                        <div class="text-[10px] uppercase font-bold text-slate-400">5v5 Net Score Yhteensä</div>
+                        <div id="summaryNetScore" class="text-2xl font-black text-amber-400 mt-1">0</div>
+                        <div class="text-[10px] text-slate-400 mt-1">Erotus kaikkien pelien välillä</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tavallinen tutka-kaavio (Player Stats -pelaajille) -->
+            <div id="modalRadarContainer" class="p-4 bg-slate-950/50 border-b border-slate-800 flex justify-center items-center">
                 <div class="relative h-64 w-full max-w-md">
                     <canvas id="playerRadarChart"></canvas>
                 </div>
@@ -738,7 +759,6 @@
                 const againstSum = row['Goal Against'] + row['Chance Against'];
                 row['5v5 Net Score'] = forSum - againstSum;
 
-                // Lasketaan 5v5 SC % (maalipaikkaosuus) ja Goal % (maaliosuus)
                 const totalChances = forSum + againstSum;
                 row['5v5 SC %'] = totalChances > 0 ? Number(((forSum / totalChances) * 100).toFixed(1)) + '%' : '0.0%';
 
@@ -1292,6 +1312,10 @@
             document.getElementById('modalPlayerName').innerText = `Player: ${playerName}`;
             document.getElementById('modalSubtitle').innerText = "Game-by-game statistics & league comparison radar";
             
+            // Piilotetaan yhteenvetokortti ja näytetään tutka-kaavio
+            document.getElementById('modalSummaryContainer').style.display = 'none';
+            document.getElementById('modalRadarContainer').style.display = 'flex';
+
             const playerGames = workbookData.playersRaw.filter(row => row['Player'] === playerName);
             if (playerGames.length === 0) return;
 
@@ -1400,7 +1424,9 @@
             document.getElementById('modalPlayerName').innerText = `Scoring Chances & Share %: ${playerName}`;
             document.getElementById('modalSubtitle').innerText = "Game-by-game scoring chances breakdown, SC % and Goal % (including inv)";
             
-            if (playerRadarInstance) { playerRadarInstance.destroy(); playerRadarInstance = null; }
+            // Näytetään yhteenvetokortti ja piilotetaan tutka-kaavio
+            document.getElementById('modalSummaryContainer').style.display = 'block';
+            document.getElementById('modalRadarContainer').style.display = 'none';
 
             const playerRows = workbookData.chancesPlayersRaw.filter(row => {
                 const num = String(row['Number']).trim();
@@ -1415,6 +1441,33 @@
                 alert("No game-by-game data available for this player.");
                 return;
             }
+
+            // Lasketaan kauden kokonaissummat yhteenvetokorttia varten
+            let totalGF = 0, totalGFI = 0, totalCF = 0, totalCFI = 0, totalGA = 0, totalCA = 0;
+            playerRows.forEach(r => {
+                totalGF += Number(r['Goal For'] || 0);
+                totalGFI += Number(r['Goal For inv'] || 0);
+                totalCF += Number(r['Chance For'] || 0);
+                totalCFI += Number(r['Chance For inv'] || 0);
+                totalGA += Number(r['Goal Against'] || 0);
+                totalCA += Number(r['Chance Against'] || 0);
+            });
+
+            const totalForSum = totalGF + totalGFI + totalCF + totalCFI;
+            const totalAgSum = totalGA + totalCA;
+            const seasonTotalC = totalForSum + totalAgSum;
+            const seasonScPct = seasonTotalC > 0 ? ((totalForSum / seasonTotalC) * 100).toFixed(1) + '%' : '0.0%';
+
+            const seasonGoalsFor = totalGF + totalGFI;
+            const seasonTotalG = seasonGoalsFor + totalGA;
+            const seasonGoalPct = seasonTotalG > 0 ? ((seasonGoalsFor / seasonTotalG) * 100).toFixed(1) + '%' : '0.0%';
+            const seasonNetScore = totalForSum - totalAgSum;
+
+            document.getElementById('summaryScPct').innerText = seasonScPct;
+            document.getElementById('summaryScSub').innerText = `Omat luodut ${totalForSum} / Vastustaja ${totalAgSum}`;
+            document.getElementById('summaryGoalPct').innerText = seasonGoalPct;
+            document.getElementById('summaryGoalSub').innerText = `Tehdyt maalit ${seasonGoalsFor} / Päästetyt ${totalGA}`;
+            document.getElementById('summaryNetScore').innerText = (seasonNetScore > 0 ? '+' : '') + seasonNetScore;
 
             const displayRows = playerRows.map(r => {
                 const forSum = Number(r['Goal For']||0) + Number(r['Goal For inv']||0) + Number(r['Chance For']||0) + Number(r['Chance For inv']||0);
@@ -1462,7 +1515,8 @@
             document.getElementById('modalPlayerName').innerText = `Category Breakdown: ${categoryName}`;
             document.getElementById('modalSubtitle').innerText = "Detailed sub-descriptors breakdown";
 
-            if (playerRadarInstance) { playerRadarInstance.destroy(); playerRadarInstance = null; }
+            document.getElementById('modalSummaryContainer').style.display = 'none';
+            document.getElementById('modalRadarContainer').style.display = 'none';
 
             const matchingRows = workbookData.chancesTeamRaw.filter(row => {
                 return getDescriptorCategory(row['Descriptor']) === categoryName;
