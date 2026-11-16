@@ -285,18 +285,18 @@
                 <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 py-1">&times;</button>
             </div>
             
-            <!-- Yhteenvetokortti tyhjän tilalle (Scoring Chances -modaaleille) -->
+            <!-- Yhteenvetokortti (Pelaajan osuus joukkueen paikoista ja maaleista) -->
             <div id="modalSummaryContainer" class="p-4 bg-slate-950/80 border-b border-slate-800" style="display: none;">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                     <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow">
-                        <div class="text-[10px] uppercase font-bold text-slate-400">5v5 Maalipaikkaosuus (SC %)</div>
+                        <div class="text-[10px] uppercase font-bold text-slate-400">Osuus Joukkueen Maalipaikoista</div>
                         <div id="summaryScPct" class="text-2xl font-black text-emerald-400 mt-1">0.0%</div>
-                        <div id="summaryScSub" class="text-[10px] text-slate-400 mt-1">Omat 0 / Vastustaja 0</div>
+                        <div id="summaryScSub" class="text-[10px] text-slate-400 mt-1">Pelaajan SC / Joukkueen SC yhteensä</div>
                     </div>
                     <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow">
-                        <div class="text-[10px] uppercase font-bold text-slate-400">5v5 Maaliosuus (Goal %)</div>
+                        <div class="text-[10px] uppercase font-bold text-slate-400">Osuus Joukkueen Maaleista</div>
                         <div id="summaryGoalPct" class="text-2xl font-black text-blue-400 mt-1">0.0%</div>
-                        <div id="summaryGoalSub" class="text-[10px] text-slate-400 mt-1">Tehdyt 0 / Päästetyt 0</div>
+                        <div id="summaryGoalSub" class="text-[10px] text-slate-400 mt-1">Pelaajan Maalit / Joukkueen Maalit</div>
                     </div>
                     <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow">
                         <div class="text-[10px] uppercase font-bold text-slate-400">5v5 Net Score Yhteensä</div>
@@ -754,21 +754,30 @@
                 aggregated[playerName]['PP chance ag'] += Number(row['PP chance ag']) || 0;
             });
 
+            // Lasketaan koko joukkueen yhteissummat vertailua varten
+            let teamTotalChancesFor = 0;
+            let teamTotalGoalsFor = 0;
+
             Object.values(aggregated).forEach(row => {
                 const forSum = row['Goal For'] + row['Goal For inv'] + row['Chance For'] + row['Chance For inv'];
                 const againstSum = row['Goal Against'] + row['Chance Against'];
                 row['5v5 Net Score'] = forSum - againstSum;
+                row['player_for_sum'] = forSum;
+                row['player_goals_for'] = row['Goal For'] + row['Goal For inv'];
 
-                const totalChances = forSum + againstSum;
-                row['5v5 SC %'] = totalChances > 0 ? Number(((forSum / totalChances) * 100).toFixed(1)) + '%' : '0.0%';
+                teamTotalChancesFor += forSum;
+                teamTotalGoalsFor += row['player_goals_for'];
+            });
 
-                const goalsFor = row['Goal For'] + row['Goal For inv'];
-                const goalsAgainst = row['Goal Against'];
-                const totalGoals = goalsFor + goalsAgainst;
-                row['5v5 Goal %'] = totalGoals > 0 ? Number(((goalsFor / totalGoals) * 100).toFixed(1)) + '%' : '0.0%';
+            Object.values(aggregated).forEach(row => {
+                row['5v5 SC %'] = teamTotalChancesFor > 0 ? Number(((row['player_for_sum'] / teamTotalChancesFor) * 100).toFixed(1)) + '%' : '0.0%';
+                row['5v5 Goal %'] = teamTotalGoalsFor > 0 ? Number(((row['player_goals_for'] / teamTotalGoalsFor) * 100).toFixed(1)) + '%' : '0.0%';
             });
 
             workbookData.chancesPlayersAggregated = Object.values(aggregated);
+            workbookData.teamTotalChancesFor = teamTotalChancesFor;
+            workbookData.teamTotalGoalsFor = teamTotalGoalsFor;
+
             populatePlayersFilter();
         }
 
@@ -898,7 +907,7 @@
             } else if (currentTab === 'chances') {
                 buildChancesData();
                 if (chancesSub === 'players') {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Player Stats (5v5 Net Score & Share %)";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Player Stats (5v5 Net Score & Team Shares)";
                     const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
                     let data = [...workbookData.chancesPlayersAggregated];
                     if (selectedPlayers.length > 0) {
@@ -1312,7 +1321,6 @@
             document.getElementById('modalPlayerName').innerText = `Player: ${playerName}`;
             document.getElementById('modalSubtitle').innerText = "Game-by-game statistics & league comparison radar";
             
-            // Piilotetaan yhteenvetokortti ja näytetään tutka-kaavio
             document.getElementById('modalSummaryContainer').style.display = 'none';
             document.getElementById('modalRadarContainer').style.display = 'flex';
 
@@ -1421,10 +1429,9 @@
         }
 
         function openChancesPlayerModal(playerName) {
-            document.getElementById('modalPlayerName').innerText = `Scoring Chances & Share %: ${playerName}`;
-            document.getElementById('modalSubtitle').innerText = "Game-by-game scoring chances breakdown, SC % and Goal % (including inv)";
+            document.getElementById('modalPlayerName').innerText = `Scoring Chances & Team Share %: ${playerName}`;
+            document.getElementById('modalSubtitle').innerText = "Game-by-game scoring chances breakdown & team share percentages (including inv)";
             
-            // Näytetään yhteenvetokortti ja piilotetaan tutka-kaavio
             document.getElementById('modalSummaryContainer').style.display = 'block';
             document.getElementById('modalRadarContainer').style.display = 'none';
 
@@ -1442,43 +1449,40 @@
                 return;
             }
 
-            // Lasketaan kauden kokonaissummat yhteenvetokorttia varten
-            let totalGF = 0, totalGFI = 0, totalCF = 0, totalCFI = 0, totalGA = 0, totalCA = 0;
+            // Lasketaan pelaajan omat totalsummat
+            let pGF = 0, pGFI = 0, pCF = 0, pCFI = 0, pGA = 0, pCA = 0;
             playerRows.forEach(r => {
-                totalGF += Number(r['Goal For'] || 0);
-                totalGFI += Number(r['Goal For inv'] || 0);
-                totalCF += Number(r['Chance For'] || 0);
-                totalCFI += Number(r['Chance For inv'] || 0);
-                totalGA += Number(r['Goal Against'] || 0);
-                totalCA += Number(r['Chance Against'] || 0);
+                pGF += Number(r['Goal For'] || 0);
+                pGFI += Number(r['Goal For inv'] || 0);
+                pCF += Number(r['Chance For'] || 0);
+                pCFI += Number(r['Chance For inv'] || 0);
+                pGA += Number(r['Goal Against'] || 0);
+                pCA += Number(r['Chance Against'] || 0);
             });
 
-            const totalForSum = totalGF + totalGFI + totalCF + totalCFI;
-            const totalAgSum = totalGA + totalCA;
-            const seasonTotalC = totalForSum + totalAgSum;
-            const seasonScPct = seasonTotalC > 0 ? ((totalForSum / seasonTotalC) * 100).toFixed(1) + '%' : '0.0%';
+            const pForSum = pGF + pGFI + pCF + pCFI;
+            const pGoalsFor = pGF + pGFI;
+            const teamTotalC = workbookData.teamTotalChancesFor || 1;
+            const teamTotalG = workbookData.teamTotalGoalsFor || 1;
 
-            const seasonGoalsFor = totalGF + totalGFI;
-            const seasonTotalG = seasonGoalsFor + totalGA;
-            const seasonGoalPct = seasonTotalG > 0 ? ((seasonGoalsFor / seasonTotalG) * 100).toFixed(1) + '%' : '0.0%';
-            const seasonNetScore = totalForSum - totalAgSum;
+            const shareSC = ((pForSum / teamTotalC) * 100).toFixed(1) + '%';
+            const shareGoal = ((pGoalsFor / teamTotalG) * 100).toFixed(1) + '%';
+            const netScore = pForSum - (pGA + pCA);
 
-            document.getElementById('summaryScPct').innerText = seasonScPct;
-            document.getElementById('summaryScSub').innerText = `Omat luodut ${totalForSum} / Vastustaja ${totalAgSum}`;
-            document.getElementById('summaryGoalPct').innerText = seasonGoalPct;
-            document.getElementById('summaryGoalSub').innerText = `Tehdyt maalit ${seasonGoalsFor} / Päästetyt ${totalGA}`;
-            document.getElementById('summaryNetScore').innerText = (seasonNetScore > 0 ? '+' : '') + seasonNetScore;
+            document.getElementById('summaryScPct').innerText = shareSC;
+            document.getElementById('summaryScSub').innerText = `Pelaajan SC ${pForSum} / Joukkueen SC ${teamTotalC}`;
+            document.getElementById('summaryGoalPct').innerText = shareGoal;
+            document.getElementById('summaryGoalSub').innerText = `Pelaajan Maalit ${pGoalsFor} / Joukkueen Maalit ${teamTotalG}`;
+            document.getElementById('summaryNetScore').innerText = (netScore > 0 ? '+' : '') + netScore;
 
             const displayRows = playerRows.map(r => {
                 const forSum = Number(r['Goal For']||0) + Number(r['Goal For inv']||0) + Number(r['Chance For']||0) + Number(r['Chance For inv']||0);
                 const agSum = Number(r['Goal Against']||0) + Number(r['Chance Against']||0);
-                const totalC = forSum + agSum;
-                const scPct = totalC > 0 ? ((forSum / totalC) * 100).toFixed(1) + '%' : '0.0%';
-
+                
                 const gFor = Number(r['Goal For']||0) + Number(r['Goal For inv']||0);
-                const gAg = Number(r['Goal Against']||0);
-                const totalG = gFor + gAg;
-                const gPct = totalG > 0 ? ((gFor / totalG) * 100).toFixed(1) + '%' : '0.0%';
+
+                const scPct = teamTotalC > 0 ? ((forSum / teamTotalC) * 100).toFixed(1) + '%' : '0.0%';
+                const gPct = teamTotalG > 0 ? ((gFor / teamTotalG) * 100).toFixed(1) + '%' : '0.0%';
 
                 const gNum = r['Game'] || '-';
                 const opp = r['Opponent'] ? ` (${r['Opponent']})` : '';
