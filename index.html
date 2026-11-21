@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -51,6 +49,17 @@
                     </select>
                 </div>
 
+                <div id="minFaceoffsFilterContainer" style="display: none;">
+                    <label class="block text-[10px] text-red-200 uppercase font-bold">Min Faceoffs</label>
+                    <select id="minFaceoffsFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
+                        <option value="0">0+ (All)</option>
+                        <option value="5">5+ Faceoffs</option>
+                        <option value="10">10+ Faceoffs</option>
+                        <option value="20">20+ Faceoffs</option>
+                        <option value="50">50+ Faceoffs</option>
+                    </select>
+                </div>
+
                 <div>
                     <label class="block text-[10px] text-red-200 uppercase font-bold">Upload Excels</label>
                     <input type="file" id="excelUpload" multiple accept=".xlsx, .xls, .csv" class="text-xs text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-red-900 file:text-white hover:file:bg-red-800 cursor-pointer">
@@ -73,6 +82,25 @@
     <!-- Main Content -->
     <main class="max-w-[98%] mx-auto px-2 py-6">
 
+        <!-- Faceoffs OZ & DZ Summary Charts Container -->
+        <div id="faceoffsChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" style="display: none;">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-red-400">OZ vs DZ Faceoff Win % Summary</h3>
+                    <span id="foSummaryBadge" class="text-[10px] bg-slate-950 text-slate-300 px-2 py-1 rounded border border-slate-800"></span>
+                </div>
+                <div class="relative h-72">
+                    <canvas id="faceoffsOzDzPctChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">OZ vs DZ Faceoffs: Won vs Lost</h3>
+                <div class="relative h-72">
+                    <canvas id="faceoffsOzDzCountChart"></canvas>
+                </div>
+            </div>
+        </div>
+
         <!-- Scoring Chances Filters Bar -->
         <div id="chancesFiltersBar" style="display: none;" class="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-4 shadow-xl grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div>
@@ -94,7 +122,15 @@
                 <label class="block text-[10px] text-red-400 uppercase font-bold mb-1">Areas / Categories (Multi-select)</label>
                 <select id="filterCategoryMulti" multiple class="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-1.5 h-20 focus:outline-none custom-scrollbar">
                     <option value="OZ">OZ (Offensive Zone)</option>
-                    <option value="DZ">DZ (Defensive Zone)</option>
+                    <option value="Rush">Rush</option>
+                    <option value="Turnovers">Turnovers</option>
+                    <option value="Takeaways">Takeaways</option>
+                    <option value="PP">PP (Powerplay / Special Teams)</option>
+                    <option value="Period 1">Period 1</option>
+                    <option value="Period 2">Period 2</option>
+                    <option value="Period 3">Period 3</option>
+                    <option value="OT">OT (Overtime)</option>
+                    <option value="Others">Others</option>
                 </select>
                 <p class="text-[9px] text-slate-400 mt-0.5">Hold Ctrl / Cmd to select multiple.</p>
             </div>
@@ -112,8 +148,8 @@
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
                 <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
                     <div>
-                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game Scoring Chances Trend & Averages (OZ vs DZ)</h2>
-                        <p class="text-xs text-slate-400">OZ and DZ scoring chances for and against across played games</p>
+                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game Scoring Chances Trend & Averages (OZ, Rush, Turnovers, Takeaways)</h2>
+                        <p class="text-xs text-slate-400">Total For vs Total Against across played games with average lines (excluding period totals to avoid double counting)</p>
                     </div>
                     <div id="trendStatsSummary" class="flex gap-4 text-xs font-semibold text-slate-300 bg-slate-950 px-4 py-2 rounded border border-slate-800">
                     </div>
@@ -346,8 +382,10 @@
         let chanceChart2Instance = null;
         let trendChartInstance = null;
         let playerRadarInstance = null;
+        let faceoffsOzDzPctChartInstance = null;
+        let faceoffsOzDzCountChartInstance = null;
 
-        const categoryOrder = ['OZ', 'DZ'];
+        const categoryOrder = ['OZ', 'Rush', 'Turnovers', 'Takeaways', 'PP', 'Period 1', 'Period 2', 'Period 3', 'OT', 'Others'];
 
         function normalizeTeamName(name) {
             if (!name) return '-';
@@ -381,6 +419,82 @@
             const m = Math.floor(secs / 60);
             const s = secs % 60;
             return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function findKey(row, patterns) {
+            if (!row) return null;
+            const keys = Object.keys(row);
+            for (let pat of patterns) {
+                const found = keys.find(k => k.toLowerCase().includes(pat.toLowerCase()));
+                if (found) return found;
+            }
+            return null;
+        }
+
+        function parseNum(val) {
+            if (val === undefined || val === null || val === '-' || val === '') return 0;
+            const n = parseFloat(String(val).replace('%', '').replace(',', '.'));
+            return isNaN(n) ? 0 : n;
+        }
+
+        function getZoneFaceoffStats(row) {
+            // OZ
+            const kOzAll = findKey(row, ['faceoffs in oz', 'faceoffs oz', 'oz faceoffs', 'total oz']);
+            const kOzWon = findKey(row, ['faceoffs won in oz', 'won in oz', 'oz won', 'oz faceoffs won', 'oz fo won']);
+            const kOzLost = findKey(row, ['faceoffs lost in oz', 'lost in oz', 'oz lost', 'oz faceoffs lost', 'oz fo lost']);
+
+            let ozWon = kOzWon ? parseNum(row[kOzWon]) : 0;
+            let ozTotal = kOzAll ? parseNum(row[kOzAll]) : 0;
+            let ozLost = kOzLost ? parseNum(row[kOzLost]) : 0;
+
+            if (kOzAll && kOzWon && !kOzLost) {
+                ozLost = Math.max(0, ozTotal - ozWon);
+            } else if (!kOzAll && (kOzWon || kOzLost)) {
+                ozTotal = ozWon + ozLost;
+            }
+
+            // DZ
+            const kDzAll = findKey(row, ['faceoffs in dz', 'faceoffs dz', 'dz faceoffs', 'total dz']);
+            const kDzWon = findKey(row, ['faceoffs won in dz', 'won in dz', 'dz won', 'dz faceoffs won', 'dz fo won']);
+            const kDzLost = findKey(row, ['faceoffs lost in dz', 'lost in dz', 'dz lost', 'dz faceoffs lost', 'dz fo lost']);
+
+            let dzWon = kDzWon ? parseNum(row[kDzWon]) : 0;
+            let dzTotal = kDzAll ? parseNum(row[kDzAll]) : 0;
+            let dzLost = kDzLost ? parseNum(row[kDzLost]) : 0;
+
+            if (kDzAll && kDzWon && !kDzLost) {
+                dzLost = Math.max(0, dzTotal - dzWon);
+            } else if (!kDzAll && (kDzWon || kDzLost)) {
+                dzTotal = dzWon + dzLost;
+            }
+
+            // NZ (optional for total faceoffs count)
+            const kNzAll = findKey(row, ['faceoffs in nz', 'faceoffs nz', 'nz faceoffs']);
+            const nzTotal = kNzAll ? parseNum(row[kNzAll]) : 0;
+
+            return {
+                ozWon,
+                ozLost,
+                ozTotal,
+                dzWon,
+                dzLost,
+                dzTotal,
+                totalAllZones: ozTotal + dzTotal + nzTotal
+            };
+        }
+
+        function getTotalFaceoffsForRow(row) {
+            const z = getZoneFaceoffStats(row);
+            if (z.totalAllZones > 0) return z.totalAllZones;
+
+            const totalKey = findKey(row, ['total faceoffs', 'faceoffs total', 'all faceoffs', 'total']);
+            if (totalKey) {
+                const v = parseNum(row[totalKey]);
+                if (v > 0) return v;
+            }
+            const wonKey = findKey(row, ['faceoffs won', 'fo won', 'won']);
+            const lostKey = findKey(row, ['faceoffs lost', 'fo lost', 'lost']);
+            return (wonKey ? parseNum(row[wonKey]) : 0) + (lostKey ? parseNum(row[lostKey]) : 0);
         }
 
         function calculateGameScore(row) {
@@ -426,15 +540,32 @@
         }
 
         function getDescriptorCategory(desc) {
-            if (desc === null || desc === undefined) return null;
-            const value = String(desc).trim().toUpperCase();
-            if (!value) return null;
+            if (!desc) return 'Others';
+            const d = String(desc).trim();
+            const upper = d.toUpperCase();
+            const lower = d.toLowerCase();
 
-            // Only classify offensive-zone and defensive-zone descriptors.
-            // The boundary check avoids matching unrelated words containing OZ/DZ.
-            if (/^OZ(?:\b|\s|[-_:])/.test(value) || value === 'OZ') return 'OZ';
-            if (/^DZ(?:\b|\s|[-_:])/.test(value) || value === 'DZ') return 'DZ';
-            return null;
+            if (upper.startsWith('PP') || upper.includes('PP ')) return 'PP';
+
+            const ozList = [
+                'OZ 1 area', 'OZ 2 area', 'OZ reb', 'Oz reb', 
+                'OZ crash the net', 'OZ rr pass', 'OZ tip', 
+                'OZ shot+screen', 'OZ blueline+screen'
+            ];
+            if (ozList.some(item => item.toLowerCase() === lower)) return 'OZ';
+
+            if (upper.includes('RUSH')) return 'Rush';
+            if (lower.includes('turnover') || lower.includes('t over')) return 'Turnovers';
+            if (upper.startsWith('TA') || upper.includes('TA ')) return 'Takeaways';
+
+            if (upper.includes('PERIOD 1')) return 'Period 1';
+            if (upper.includes('PERIOD 2')) return 'Period 2';
+            if (upper.includes('PERIOD 3')) return 'Period 3';
+            if (upper.includes('OT') || upper.includes('OVERTIME')) return 'OT';
+
+            if (lower === 'empty net' || lower === 'pk' || lower === 'faceoff') return 'Others';
+
+            return 'Others';
         }
 
         function isPeriodCategory(cat) {
@@ -442,6 +573,8 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('minFaceoffsFilter').addEventListener('change', renderCurrentView);
+
             try {
                 const response = await fetch('Sdhl Game score 2026-2027.xlsx');
                 if (response.ok) {
@@ -643,6 +776,7 @@
         }
 
         function buildChancesData() {
+            if (workbookData.chancesPlayersRaw.length === 0) return;
 
             const numToPlayer = {};
             workbookData.playersRaw.filter(p => p['Team'] === 'Lulea').forEach(p => {
@@ -669,9 +803,6 @@
 
             const gamesSet = new Set();
             workbookData.chancesPlayersRaw.forEach(row => {
-                if (row['Game']) gamesSet.add(String(row['Game']));
-            });
-            workbookData.chancesTeamRaw.forEach(row => {
                 if (row['Game']) gamesSet.add(String(row['Game']));
             });
             const gamesArray = Array.from(gamesSet).sort((a,b) => Number(a)-Number(b));
@@ -737,14 +868,13 @@
                 aggregated[playerName]['PP chance ag'] += Number(row['PP chance ag']) || 0;
             });
 
-            // Lasketaan koko joukkueen yhteissummat (jätetään erät pois laskuista duplikaattien välttämiseksi)
             let teamTotalChancesFor = 0;
             let teamTotalGoalsFor = 0;
 
             workbookData.chancesTeamRaw.forEach(row => {
                 if (selectedGames.length > 0 && !selectedGames.includes(String(row['Game']))) return;
                 const cat = getDescriptorCategory(row['Descriptor']);
-                if (!['OZ', 'DZ'].includes(cat)) return;
+                if (isPeriodCategory(cat)) return;
 
                 teamTotalChancesFor += (Number(row['Goal For']) || 0) + (Number(row['Chance For']) || 0);
                 teamTotalGoalsFor += (Number(row['Goal For']) || 0);
@@ -845,10 +975,12 @@
 
             document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
             document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare' || tabName === 'chances' || tabName === 'trends') ? 'none' : 'block';
+            document.getElementById('minFaceoffsFilterContainer').style.display = (tabName === 'faceoffs') ? 'block' : 'none';
             
             document.getElementById('chartsContainer').style.display = (tabName === 'players') ? 'grid' : 'none';
             document.getElementById('teamChartsContainer').style.display = (tabName === 'teams') ? 'grid' : 'none';
             document.getElementById('chancesChartsContainer').style.display = (tabName === 'chances') ? 'grid' : 'none';
+            document.getElementById('faceoffsChartsContainer').style.display = (tabName === 'faceoffs') ? 'grid' : 'none';
 
             currentSortColumn = null;
             renderCurrentView();
@@ -873,13 +1005,18 @@
             } else if (currentTab === 'compare') {
                 updatePlayerComparison();
             } else if (currentTab === 'faceoffs') {
-                document.getElementById('tableTitle').innerText = "Faceoffs Statistics";
+                const minFo = Number(document.getElementById('minFaceoffsFilter').value) || 0;
+                document.getElementById('tableTitle').innerText = `Faceoffs Statistics (Min ${minFo} Faceoffs)`;
                 let data = [...workbookData.faceoffsRaw];
                 if (selectedTeam !== 'all') {
                     data = data.filter(row => String(row['Team']) === selectedTeam);
                 }
+                if (minFo > 0) {
+                    data = data.filter(row => getTotalFaceoffsForRow(row) >= minFo);
+                }
                 currentFilteredData = data;
                 renderTable();
+                renderFaceoffsOzDzCharts(currentFilteredData);
             } else if (currentTab === 'teams') {
                 document.getElementById('tableTitle').innerText = "Teams SDHL Statistics";
                 currentFilteredData = [...workbookData.teamsRaw];
@@ -906,7 +1043,7 @@
                     renderTable();
                     renderChancesPlayerCharts();
                 } else {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: OZ & DZ - Click category row for breakdown";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Areas & Play Styles (OZ, Rush, Turnovers, Takeaways, PP...) - Click category row for breakdown";
                     
                     const selectedCategories = Array.from(document.getElementById('filterCategoryMulti').selectedOptions).map(opt => opt.value);
                     const selectedGames = Array.from(document.getElementById('filterChancesGamesMulti').selectedOptions).map(opt => opt.value);
@@ -919,7 +1056,6 @@
                     const catMap = {};
                     teamRaw.forEach(row => {
                         const cat = getDescriptorCategory(row['Descriptor']);
-                        if (!['OZ', 'DZ'].includes(cat)) return;
                         if (!catMap[cat]) {
                             catMap[cat] = { 'Category / Area': cat, 'Goal For': 0, 'Chance For': 0, 'Goal Against': 0, 'Chance Against': 0 };
                         }
@@ -947,12 +1083,86 @@
             }
         }
 
+        function renderFaceoffsOzDzCharts(rows) {
+            if (faceoffsOzDzPctChartInstance) faceoffsOzDzPctChartInstance.destroy();
+            if (faceoffsOzDzCountChartInstance) faceoffsOzDzCountChartInstance.destroy();
+
+            let ozWon = 0, ozLost = 0, ozTotal = 0;
+            let dzWon = 0, dzLost = 0, dzTotal = 0;
+
+            rows.forEach(row => {
+                const z = getZoneFaceoffStats(row);
+                ozWon += z.ozWon;
+                ozLost += z.ozLost;
+                ozTotal += z.ozTotal;
+
+                dzWon += z.dzWon;
+                dzLost += z.dzLost;
+                dzTotal += z.dzTotal;
+            });
+
+            const ozPct = ozTotal > 0 ? Number(((ozWon / ozTotal) * 100).toFixed(1)) : 0;
+            const dzPct = dzTotal > 0 ? Number(((dzWon / dzTotal) * 100).toFixed(1)) : 0;
+
+            document.getElementById('foSummaryBadge').innerText = `Rows: ${rows.length} | OZ: ${ozTotal} | DZ: ${dzTotal}`;
+
+            faceoffsOzDzPctChartInstance = new Chart(document.getElementById('faceoffsOzDzPctChart').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: ['OZ Faceoff Win %', 'DZ Faceoff Win %'],
+                    datasets: [{
+                        label: 'Win %',
+                        data: [ozPct, dzPct],
+                        backgroundColor: ['#10b981', '#3b82f6']
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: {
+                            anchor: 'end', align: 'top', color: '#cbd5e1',
+                            font: { size: 11, weight: 'bold' },
+                            formatter: (v) => v + '%'
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 11 } } },
+                        y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' } }
+                    }
+                }
+            });
+
+            faceoffsOzDzCountChartInstance = new Chart(document.getElementById('faceoffsOzDzCountChart').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: ['OZ', 'DZ'],
+                    datasets: [
+                        { label: 'Won', data: [ozWon, dzWon], backgroundColor: '#10b981' },
+                        { label: 'Lost', data: [ozLost, dzLost], backgroundColor: '#ef4444' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: {
+                            anchor: 'end', align: 'top', color: '#cbd5e1',
+                            font: { size: 10, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 11 } } },
+                        y: { ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+        }
+
         function renderTrendsView() {
             if (trendChartInstance) trendChartInstance.destroy();
-            if (!workbookData.chancesTeamRaw || workbookData.chancesTeamRaw.length === 0) {
-                document.getElementById('trendStatsSummary').innerText = 'Upload the scoring chances Excel file to view trends.';
-                return;
-            }
 
             const gameInfoMap = {};
             workbookData.chancesTeamRaw.forEach(row => {
@@ -964,12 +1174,12 @@
                 }
             });
 
-            const validCats = ['OZ', 'DZ'];
+            const validCats = ['OZ', 'Rush', 'Turnovers', 'Takeaways'];
             const gameMap = {};
 
             workbookData.chancesTeamRaw.forEach(row => {
                 const descCat = getDescriptorCategory(row['Descriptor']);
-                if (!validCats.includes(descCat)) return;
+                if (!validCats.includes(descCat) || isPeriodCategory(descCat)) return;
 
                 const g = String(row['Game']);
                 if (!g || g === 'undefined' || g === '0') return;
@@ -1012,7 +1222,7 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Total For (OZ + DZ)', data: dataFor, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, tension: 0.1 },
+                        { label: 'Total For (OZ, Rush, TO, TA)', data: dataFor, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, tension: 0.1 },
                         { label: 'Total Against', data: dataAgainst, borderColor: '#ef4444', backgroundColor: '#ef4444', borderWidth: 2, tension: 0.1 },
                         { label: 'Avg For', data: avgForArr, borderColor: '#3b82f6', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
                         { label: 'Avg Against', data: avgAgainstArr, borderColor: '#ef4444', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
@@ -1247,7 +1457,10 @@
         }
 
         function renderTable() {
-            if (currentFilteredData.length === 0) return;
+            if (currentFilteredData.length === 0) {
+                document.getElementById('tableBody').innerHTML = `<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400">No matching rows found.</td></tr>`;
+                return;
+            }
 
             const searchTerm = document.getElementById('playerSearch').value.toLowerCase();
             const filtered = currentFilteredData.filter(row => {
@@ -1910,8 +2123,8 @@
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            document.getElementById('chanceChart1Title').innerText = "OZ & DZ: Scoring Chances (Chance For vs Against)";
-            document.getElementById('chanceChart2Title').innerText = "OZ & DZ: Goals (Goal For vs Against)";
+            document.getElementById('chanceChart1Title').innerText = "Areas & Play Styles: Scoring Chances (Chance For vs Against)";
+            document.getElementById('chanceChart2Title').innerText = "Areas & Play Styles: Goals (Goal For vs Against)";
 
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
                 type: 'bar',
@@ -1984,7 +2197,3 @@
     </script>
 </body>
 </html>
-
-
-
-
