@@ -1,3 +1,15 @@
+
+
+
+
+
+
+
+
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -52,6 +64,7 @@
                 <div>
                     <label class="block text-[10px] text-red-200 uppercase font-bold">Upload Excels</label>
                     <input type="file" id="excelUpload" multiple accept=".xlsx, .xls, .csv" class="text-xs text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-red-900 file:text-white hover:file:bg-red-800 cursor-pointer">
+                    <p id="excelStorageStatus" class="text-[10px] text-slate-400 mt-1">Excel files are saved in this browser after upload.</p>
                 </div>
             </div>
         </div>
@@ -186,6 +199,47 @@
                 <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals: For vs Against</h3>
                 <div class="relative h-80">
                     <canvas id="chanceChart2"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Faceoffs Analytics Dashboard -->
+        <div id="faceoffsChartsContainer" class="space-y-4 mb-8" style="display: none;">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-xl">
+                <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+                    <div>
+                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Faceoff Leaders by Zone</h2>
+                        <p class="text-xs text-slate-400 mt-1">Ranked by faceoff win percentage. Minimum attempts are applied separately to DZ and OZ.</p>
+                    </div>
+                    <div>
+                        <label for="faceoffMinAttempts" class="block text-[10px] text-slate-400 uppercase font-bold mb-1">Minimum faceoffs per zone</label>
+                        <select id="faceoffMinAttempts" class="bg-slate-950 border border-slate-700 text-white text-xs rounded px-3 py-2">
+                            <option value="5">5+ attempts</option>
+                            <option value="10" selected>10+ attempts</option>
+                            <option value="15">15+ attempts</option>
+                            <option value="20">20+ attempts</option>
+                            <option value="30">30+ attempts</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="faceoffSummary" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4"></div>
+            </div>
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-red-400">DZ Faceoff Leaders</h3>
+                        <span class="text-[10px] text-slate-500">Defensive Zone</span>
+                    </div>
+                    <div class="relative h-[420px]"><canvas id="faceoffDZChart"></canvas></div>
+                    <div id="faceoffDZEmpty" class="hidden text-xs text-slate-400 text-center py-8">No players meet the minimum attempt requirement.</div>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-blue-400">OZ Faceoff Leaders</h3>
+                        <span class="text-[10px] text-slate-500">Offensive Zone</span>
+                    </div>
+                    <div class="relative h-[420px]"><canvas id="faceoffOZChart"></canvas></div>
+                    <div id="faceoffOZEmpty" class="hidden text-xs text-slate-400 text-center py-8">No players meet the minimum attempt requirement.</div>
                 </div>
             </div>
         </div>
@@ -352,6 +406,8 @@
         let chanceChart2Instance = null;
         let trendChartInstance = null;
         let playerRadarInstance = null;
+        let faceoffDZChartInstance = null;
+        let faceoffOZChartInstance = null;
 
         const categoryOrder = ['OZ', 'Rush', 'Turnovers', 'Takeaways', 'PP', 'Period 1', 'Period 2', 'Period 3', 'OT', 'Others'];
 
@@ -464,41 +520,129 @@
             return ['Period 1', 'Period 2', 'Period 3', 'OT'].includes(cat);
         }
 
-        window.addEventListener('DOMContentLoaded', async () => {
-            try {
-                const response = await fetch('Sdhl Game score 2026-2027.xlsx');
-                if (response.ok) {
-                    const arrayBuffer = await response.arrayBuffer();
-                    processMainExcel(arrayBuffer);
-                }
-            } catch (e) {
-                console.log('Main excel load manual.');
-            }
+        // Persist the latest Excel files in this browser using IndexedDB.
+        // Main statistics and Scoring Chances are stored separately, so either can be updated alone.
+        const EXCEL_DB_NAME = 'SDHLGameStatsStorage';
+        const EXCEL_DB_VERSION = 1;
+        const EXCEL_STORE_NAME = 'uploadedExcels';
 
-            try {
-                const response2 = await fetch('SDHL 2026-2027 scoring chances.xlsx');
-                if (response2.ok) {
-                    const arrayBuffer2 = await response2.arrayBuffer();
-                    processChancesExcel(arrayBuffer2);
+        function openExcelDatabase() {
+            return new Promise((resolve, reject) => {
+                if (!window.indexedDB) {
+                    reject(new Error('IndexedDB is not available in this browser.'));
+                    return;
                 }
-            } catch (e) {
-                console.log('Chances excel load manual.');
-            }
-        });
-
-        document.getElementById('excelUpload').addEventListener('change', (e) => {
-            const files = e.target.files;
-            for (let file of files) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const arrayBuffer = event.target.result;
-                    if (file.name.toLowerCase().includes('chance')) {
-                        processChancesExcel(arrayBuffer);
-                    } else {
-                        processMainExcel(arrayBuffer);
+                const request = indexedDB.open(EXCEL_DB_NAME, EXCEL_DB_VERSION);
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(EXCEL_STORE_NAME)) {
+                        db.createObjectStore(EXCEL_STORE_NAME, { keyPath: 'key' });
                     }
                 };
-                reader.readAsArrayBuffer(file);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error || new Error('Could not open browser storage.'));
+            });
+        }
+
+        async function saveExcelToBrowser(key, fileName, arrayBuffer) {
+            const db = await openExcelDatabase();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(EXCEL_STORE_NAME, 'readwrite');
+                tx.objectStore(EXCEL_STORE_NAME).put({
+                    key,
+                    fileName,
+                    data: arrayBuffer.slice(0),
+                    savedAt: new Date().toISOString()
+                });
+                tx.oncomplete = () => { db.close(); resolve(); };
+                tx.onerror = () => { db.close(); reject(tx.error || new Error('Could not save Excel file.')); };
+                tx.onabort = () => { db.close(); reject(tx.error || new Error('Saving Excel file was cancelled.')); };
+            });
+        }
+
+        async function getSavedExcelFromBrowser(key) {
+            const db = await openExcelDatabase();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(EXCEL_STORE_NAME, 'readonly');
+                const request = tx.objectStore(EXCEL_STORE_NAME).get(key);
+                request.onsuccess = () => resolve(request.result || null);
+                request.onerror = () => reject(request.error || new Error('Could not read saved Excel file.'));
+                tx.oncomplete = () => db.close();
+                tx.onerror = () => { db.close(); reject(tx.error || new Error('Could not read browser storage.')); };
+            });
+        }
+
+        function setExcelStorageStatus(message, isError = false) {
+            const el = document.getElementById('excelStorageStatus');
+            if (!el) return;
+            el.textContent = message;
+            el.className = `text-[10px] mt-1 ${isError ? 'text-amber-300' : 'text-slate-400'}`;
+        }
+
+        async function loadDefaultExcel(url, processor) {
+            try {
+                const response = await fetch(url);
+                if (response.ok) processor(await response.arrayBuffer());
+            } catch (e) {
+                console.log('Default Excel not available for automatic loading:', url);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const faceoffMinSelect = document.getElementById('faceoffMinAttempts');
+            if (faceoffMinSelect) faceoffMinSelect.addEventListener('change', renderFaceoffCharts);
+
+            let mainLoaded = false;
+            let chancesLoaded = false;
+            try {
+                const savedMain = await getSavedExcelFromBrowser('main');
+                if (savedMain && savedMain.data) {
+                    processMainExcel(savedMain.data);
+                    mainLoaded = true;
+                }
+                const savedChances = await getSavedExcelFromBrowser('chances');
+                if (savedChances && savedChances.data) {
+                    processChancesExcel(savedChances.data);
+                    chancesLoaded = true;
+                }
+                const loadedNames = [];
+                if (savedMain) loadedNames.push(savedMain.fileName || 'Main statistics');
+                if (savedChances) loadedNames.push(savedChances.fileName || 'Scoring Chances');
+                if (loadedNames.length) setExcelStorageStatus('Restored saved files: ' + loadedNames.join(' · '));
+            } catch (e) {
+                console.warn('Could not restore saved Excel files:', e);
+                setExcelStorageStatus('Browser storage unavailable. Upload the Excel files again in this session.', true);
+            }
+
+            // Keep support for Excel files placed beside the HTML, but never overwrite saved uploads.
+            if (!mainLoaded) await loadDefaultExcel('Sdhl Game score 2026-2027.xlsx', processMainExcel);
+            if (!chancesLoaded) await loadDefaultExcel('SDHL 2026-2027 scoring chances.xlsx', processChancesExcel);
+        });
+
+        document.getElementById('excelUpload').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files || []);
+            if (!files.length) return;
+            const updated = [];
+            try {
+                for (const file of files) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    if (file.name.toLowerCase().includes('chance')) {
+                        processChancesExcel(arrayBuffer);
+                        await saveExcelToBrowser('chances', file.name, arrayBuffer);
+                        updated.push('Scoring Chances');
+                    } else {
+                        processMainExcel(arrayBuffer);
+                        await saveExcelToBrowser('main', file.name, arrayBuffer);
+                        updated.push('Main statistics');
+                    }
+                }
+                setExcelStorageStatus('Saved in this browser: ' + updated.join(' + ') + '. You can replace either file whenever you have an update.');
+            } catch (err) {
+                console.error('Excel upload or browser save failed:', err);
+                setExcelStorageStatus('Could not save the file in this browser. Check browser storage settings and try again.', true);
+            } finally {
+                // Allows selecting the same file again later to replace it.
+                e.target.value = '';
             }
         });
 
@@ -870,6 +1014,7 @@
             document.getElementById('chartsContainer').style.display = (tabName === 'players') ? 'grid' : 'none';
             document.getElementById('teamChartsContainer').style.display = (tabName === 'teams') ? 'grid' : 'none';
             document.getElementById('chancesChartsContainer').style.display = (tabName === 'chances') ? 'grid' : 'none';
+            document.getElementById('faceoffsChartsContainer').style.display = (tabName === 'faceoffs') ? 'block' : 'none';
 
             currentSortColumn = null;
             renderCurrentView();
@@ -901,6 +1046,7 @@
                 }
                 currentFilteredData = data;
                 renderTable();
+                renderFaceoffCharts();
             } else if (currentTab === 'teams') {
                 document.getElementById('tableTitle').innerText = "Teams SDHL Statistics";
                 currentFilteredData = [...workbookData.teamsRaw];
@@ -965,6 +1111,146 @@
             } else if (currentTab === 'trends') {
                 renderTrendsView();
             }
+        }
+
+
+        function renderFaceoffCharts() {
+            const container = document.getElementById('faceoffsChartsContainer');
+            if (!container) return;
+
+            const selectedTeam = document.getElementById('teamFilter').value;
+            const minAttempts = Number(document.getElementById('faceoffMinAttempts')?.value || 10);
+            let rows = [...workbookData.faceoffsRaw];
+
+            if (selectedTeam !== 'all') {
+                rows = rows.filter(row => String(row['Team']) === selectedTeam);
+            }
+
+            const toNumber = value => {
+                if (value === null || value === undefined || value === '-') return 0;
+                const parsed = Number(String(value).replace('%', '').replace(',', '.').trim());
+                return Number.isFinite(parsed) ? parsed : 0;
+            };
+
+            const buildZoneData = zone => {
+                const attemptsKey = `Faceoffs in ${zone}`;
+                const winsKey = `Faceoffs won in ${zone}`;
+
+                return rows.map(row => {
+                    const attempts = toNumber(row[attemptsKey]);
+                    const wins = toNumber(row[winsKey]);
+                    return {
+                        player: String(row['Player'] || 'Unknown'),
+                        team: String(row['Team'] || '-'),
+                        position: String(row['Position'] || '-'),
+                        attempts,
+                        wins,
+                        losses: Math.max(0, attempts - wins),
+                        pct: attempts > 0 ? (wins / attempts) * 100 : 0
+                    };
+                }).filter(p => p.attempts >= minAttempts && p.wins <= p.attempts)
+                  .sort((a, b) => b.pct - a.pct || b.attempts - a.attempts)
+                  .slice(0, 10);
+            };
+
+            const dz = buildZoneData('DZ');
+            const oz = buildZoneData('OZ');
+
+            const totalDZAttempts = rows.reduce((sum, row) => sum + toNumber(row['Faceoffs in DZ']), 0);
+            const totalDZWins = rows.reduce((sum, row) => sum + toNumber(row['Faceoffs won in DZ']), 0);
+            const totalOZAttempts = rows.reduce((sum, row) => sum + toNumber(row['Faceoffs in OZ']), 0);
+            const totalOZWins = rows.reduce((sum, row) => sum + toNumber(row['Faceoffs won in OZ']), 0);
+            const dzPct = totalDZAttempts ? (totalDZWins / totalDZAttempts * 100) : 0;
+            const ozPct = totalOZAttempts ? (totalOZWins / totalOZAttempts * 100) : 0;
+
+            document.getElementById('faceoffSummary').innerHTML = `
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-[10px] uppercase text-slate-400 font-bold">DZ League / Selected Teams</div>
+                    <div class="text-2xl font-black text-red-400 mt-1">${dzPct.toFixed(1)}%</div>
+                    <div class="text-[10px] text-slate-500">${totalDZWins} wins / ${totalDZAttempts} attempts</div>
+                </div>
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-[10px] uppercase text-slate-400 font-bold">OZ League / Selected Teams</div>
+                    <div class="text-2xl font-black text-blue-400 mt-1">${ozPct.toFixed(1)}%</div>
+                    <div class="text-[10px] text-slate-500">${totalOZWins} wins / ${totalOZAttempts} attempts</div>
+                </div>
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3">
+                    <div class="text-[10px] uppercase text-slate-400 font-bold">Ranking Criteria</div>
+                    <div class="text-2xl font-black text-white mt-1">${minAttempts}+</div>
+                    <div class="text-[10px] text-slate-500">Minimum attempts per zone · Top 10 shown</div>
+                </div>
+            `;
+
+            const renderZoneChart = (zoneData, canvasId, emptyId, oldInstance, color) => {
+                if (oldInstance) oldInstance.destroy();
+
+                const canvas = document.getElementById(canvasId);
+                const empty = document.getElementById(emptyId);
+                if (!zoneData.length) {
+                    canvas.parentElement.style.display = 'none';
+                    empty.classList.remove('hidden');
+                    return null;
+                }
+
+                canvas.parentElement.style.display = 'block';
+                empty.classList.add('hidden');
+
+                return new Chart(canvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: zoneData.map(p => `${p.player} (${p.team})`),
+                        datasets: [{
+                            label: 'Faceoff win %',
+                            data: zoneData.map(p => Number(p.pct.toFixed(1))),
+                            backgroundColor: color,
+                            borderColor: color,
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            barThickness: 22
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 250 },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: context => {
+                                        const p = zoneData[context.dataIndex];
+                                        return ` ${p.pct.toFixed(1)}% · ${p.wins} won / ${p.attempts} total`;
+                                    },
+                                    afterLabel: context => {
+                                        const p = zoneData[context.dataIndex];
+                                        return `Position: ${p.position} · Lost: ${p.losses}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                min: 0,
+                                max: 100,
+                                ticks: { color: '#94a3b8', callback: value => `${value}%` },
+                                grid: { color: '#334155' }
+                            },
+                            y: {
+                                ticks: { color: '#cbd5e1', font: { size: 10 } },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            };
+
+            faceoffDZChartInstance = renderZoneChart(
+                dz, 'faceoffDZChart', 'faceoffDZEmpty', faceoffDZChartInstance, 'rgba(239, 68, 68, 0.78)'
+            );
+            faceoffOZChartInstance = renderZoneChart(
+                oz, 'faceoffOZChart', 'faceoffOZEmpty', faceoffOZChartInstance, 'rgba(59, 130, 246, 0.78)'
+            );
         }
 
         function renderTrendsView() {
@@ -2000,3 +2286,7 @@
     </script>
 </body>
 </html>
+
+
+
+
