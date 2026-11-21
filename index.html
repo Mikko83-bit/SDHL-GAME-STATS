@@ -49,6 +49,17 @@
                     </select>
                 </div>
 
+                <div id="minFaceoffsFilterContainer" style="display: none;">
+                    <label class="block text-[10px] text-red-200 uppercase font-bold">Min Faceoffs</label>
+                    <select id="minFaceoffsFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
+                        <option value="0">0+ (All)</option>
+                        <option value="5">5+ Faceoffs</option>
+                        <option value="10">10+ Faceoffs</option>
+                        <option value="20">20+ Faceoffs</option>
+                        <option value="50">50+ Faceoffs</option>
+                    </select>
+                </div>
+
                 <div>
                     <label class="block text-[10px] text-red-200 uppercase font-bold">Upload Excels</label>
                     <input type="file" id="excelUpload" multiple accept=".xlsx, .xls, .csv" class="text-xs text-slate-300 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-red-900 file:text-white hover:file:bg-red-800 cursor-pointer">
@@ -70,6 +81,25 @@
 
     <!-- Main Content -->
     <main class="max-w-[98%] mx-auto px-2 py-6">
+
+        <!-- Faceoffs OZ & DZ Summary Charts Container -->
+        <div id="faceoffsChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" style="display: none;">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-red-400">OZ vs DZ Faceoff Win % Summary</h3>
+                    <span id="foSummaryBadge" class="text-[10px] bg-slate-950 text-slate-300 px-2 py-1 rounded border border-slate-800"></span>
+                </div>
+                <div class="relative h-72">
+                    <canvas id="faceoffsOzDzPctChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">OZ vs DZ Faceoffs: Won vs Lost</h3>
+                <div class="relative h-72">
+                    <canvas id="faceoffsOzDzCountChart"></canvas>
+                </div>
+            </div>
+        </div>
 
         <!-- Scoring Chances Filters Bar -->
         <div id="chancesFiltersBar" style="display: none;" class="bg-slate-900 border border-slate-800 rounded-lg p-4 mb-4 shadow-xl grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
@@ -352,6 +382,8 @@
         let chanceChart2Instance = null;
         let trendChartInstance = null;
         let playerRadarInstance = null;
+        let faceoffsOzDzPctChartInstance = null;
+        let faceoffsOzDzCountChartInstance = null;
 
         const categoryOrder = ['OZ', 'Rush', 'Turnovers', 'Takeaways', 'PP', 'Period 1', 'Period 2', 'Period 3', 'OT', 'Others'];
 
@@ -387,6 +419,39 @@
             const m = Math.floor(secs / 60);
             const s = secs % 60;
             return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function findKey(row, patterns) {
+            if (!row) return null;
+            const keys = Object.keys(row);
+            for (let pat of patterns) {
+                const found = keys.find(k => k.toLowerCase().includes(pat.toLowerCase()));
+                if (found) return found;
+            }
+            return null;
+        }
+
+        function getTotalFaceoffsForRow(row) {
+            const totalKey = findKey(row, ['total faceoffs', 'faceoffs total', 'all faceoffs', 'total']);
+            if (totalKey && !isNaN(parseFloat(row[totalKey]))) {
+                return parseFloat(row[totalKey]) || 0;
+            }
+            const wonKey = findKey(row, ['faceoffs won', 'fo won', 'won']);
+            const lostKey = findKey(row, ['faceoffs lost', 'fo lost', 'lost']);
+            const won = wonKey ? (parseFloat(row[wonKey]) || 0) : 0;
+            const lost = lostKey ? (parseFloat(row[lostKey]) || 0) : 0;
+            if (won + lost > 0) return won + lost;
+
+            const ozWonKey = findKey(row, ['oz won', 'oz faceoffs won', 'oz fo won']);
+            const ozLostKey = findKey(row, ['oz lost', 'oz faceoffs lost', 'oz fo lost']);
+            const dzWonKey = findKey(row, ['dz won', 'dz faceoffs won', 'dz fo won']);
+            const dzLostKey = findKey(row, ['dz lost', 'dz faceoffs lost', 'dz fo lost']);
+            return (
+                (ozWonKey ? (parseFloat(row[ozWonKey]) || 0) : 0) +
+                (ozLostKey ? (parseFloat(row[ozLostKey]) || 0) : 0) +
+                (dzWonKey ? (parseFloat(row[dzWonKey]) || 0) : 0) +
+                (dzLostKey ? (parseFloat(row[dzLostKey]) || 0) : 0)
+            );
         }
 
         function calculateGameScore(row) {
@@ -465,6 +530,8 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('minFaceoffsFilter').addEventListener('change', renderCurrentView);
+
             try {
                 const response = await fetch('Sdhl Game score 2026-2027.xlsx');
                 if (response.ok) {
@@ -511,7 +578,7 @@
                 workbookData.playersRaw = tempRaw.map(row => {
                     if (row['Date']) row['Date'] = formatExcelDate(row['Date']);
                     if (row['Team']) row['Team'] = normalizeTeamName(row['Team']);
-                    if (row['Opponent']) row['Opponent'] = normalizeTeamName(row['Team']);
+                    if (row['Opponent']) row['Opponent'] = normalizeTeamName(row['Opponent']);
                     row['Games'] = 1;
                     const gs = calculateGameScore(row);
                     row['Game Score'] = Number(gs.toFixed(2));
@@ -758,14 +825,13 @@
                 aggregated[playerName]['PP chance ag'] += Number(row['PP chance ag']) || 0;
             });
 
-            // Lasketaan koko joukkueen yhteissummat (jätetään erät pois laskuista duplikaattien välttämiseksi)
             let teamTotalChancesFor = 0;
             let teamTotalGoalsFor = 0;
 
             workbookData.chancesTeamRaw.forEach(row => {
                 if (selectedGames.length > 0 && !selectedGames.includes(String(row['Game']))) return;
                 const cat = getDescriptorCategory(row['Descriptor']);
-                if (isPeriodCategory(cat)) return; // Jätetään erät pois laskuista!
+                if (isPeriodCategory(cat)) return;
 
                 teamTotalChancesFor += (Number(row['Goal For']) || 0) + (Number(row['Chance For']) || 0);
                 teamTotalGoalsFor += (Number(row['Goal For']) || 0);
@@ -866,10 +932,12 @@
 
             document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
             document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare' || tabName === 'chances' || tabName === 'trends') ? 'none' : 'block';
+            document.getElementById('minFaceoffsFilterContainer').style.display = (tabName === 'faceoffs') ? 'block' : 'none';
             
             document.getElementById('chartsContainer').style.display = (tabName === 'players') ? 'grid' : 'none';
             document.getElementById('teamChartsContainer').style.display = (tabName === 'teams') ? 'grid' : 'none';
             document.getElementById('chancesChartsContainer').style.display = (tabName === 'chances') ? 'grid' : 'none';
+            document.getElementById('faceoffsChartsContainer').style.display = (tabName === 'faceoffs') ? 'grid' : 'none';
 
             currentSortColumn = null;
             renderCurrentView();
@@ -894,13 +962,18 @@
             } else if (currentTab === 'compare') {
                 updatePlayerComparison();
             } else if (currentTab === 'faceoffs') {
-                document.getElementById('tableTitle').innerText = "Faceoffs Statistics";
+                const minFo = Number(document.getElementById('minFaceoffsFilter').value) || 0;
+                document.getElementById('tableTitle').innerText = `Faceoffs Statistics (Min ${minFo} Faceoffs)`;
                 let data = [...workbookData.faceoffsRaw];
                 if (selectedTeam !== 'all') {
                     data = data.filter(row => String(row['Team']) === selectedTeam);
                 }
+                if (minFo > 0) {
+                    data = data.filter(row => getTotalFaceoffsForRow(row) >= minFo);
+                }
                 currentFilteredData = data;
                 renderTable();
+                renderFaceoffsOzDzCharts(currentFilteredData, minFo);
             } else if (currentTab === 'teams') {
                 document.getElementById('tableTitle').innerText = "Teams SDHL Statistics";
                 currentFilteredData = [...workbookData.teamsRaw];
@@ -965,6 +1038,86 @@
             } else if (currentTab === 'trends') {
                 renderTrendsView();
             }
+        }
+
+        function renderFaceoffsOzDzCharts(rows, minFo) {
+            if (faceoffsOzDzPctChartInstance) faceoffsOzDzPctChartInstance.destroy();
+            if (faceoffsOzDzCountChartInstance) faceoffsOzDzCountChartInstance.destroy();
+
+            let ozWon = 0, ozLost = 0, dzWon = 0, dzLost = 0;
+
+            rows.forEach(row => {
+                const kOzWon = findKey(row, ['oz won', 'oz faceoffs won', 'oz fo won', 'oz fows', 'oz_won']);
+                const kOzLost = findKey(row, ['oz lost', 'oz faceoffs lost', 'oz fo lost', 'oz fols', 'oz_lost']);
+                const kDzWon = findKey(row, ['dz won', 'dz faceoffs won', 'dz fo won', 'dz fows', 'dz_won']);
+                const kDzLost = findKey(row, ['dz lost', 'dz faceoffs lost', 'dz fo lost', 'dz fols', 'dz_lost']);
+
+                ozWon += kOzWon ? (parseFloat(row[kOzWon]) || 0) : 0;
+                ozLost += kOzLost ? (parseFloat(row[kOzLost]) || 0) : 0;
+                dzWon += kDzWon ? (parseFloat(row[kDzWon]) || 0) : 0;
+                dzLost += kDzLost ? (parseFloat(row[kDzLost]) || 0) : 0;
+            });
+
+            const ozTotal = ozWon + ozLost;
+            const dzTotal = dzWon + dzLost;
+            const ozPct = ozTotal > 0 ? Number(((ozWon / ozTotal) * 100).toFixed(1)) : 0;
+            const dzPct = dzTotal > 0 ? Number(((dzWon / dzTotal) * 100).toFixed(1)) : 0;
+
+            document.getElementById('foSummaryBadge').innerText = `Rows: ${rows.length} | OZ: ${ozTotal} | DZ: ${dzTotal}`;
+
+            faceoffsOzDzPctChartInstance = new Chart(document.getElementById('faceoffsOzDzPctChart').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: ['OZ Faceoff Win %', 'DZ Faceoff Win %'],
+                    datasets: [{
+                        label: 'Win %',
+                        data: [ozPct, dzPct],
+                        backgroundColor: ['#10b981', '#3b82f6']
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: {
+                            anchor: 'end', align: 'top', color: '#cbd5e1',
+                            font: { size: 11, weight: 'bold' },
+                            formatter: (v) => v + '%'
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 11 } } },
+                        y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' } }
+                    }
+                }
+            });
+
+            faceoffsOzDzCountChartInstance = new Chart(document.getElementById('faceoffsOzDzCountChart').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: ['OZ', 'DZ'],
+                    datasets: [
+                        { label: 'Won', data: [ozWon, dzWon], backgroundColor: '#10b981' },
+                        { label: 'Lost', data: [ozLost, dzLost], backgroundColor: '#ef4444' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: {
+                            anchor: 'end', align: 'top', color: '#cbd5e1',
+                            font: { size: 10, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 11 } } },
+                        y: { ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
         }
 
         function renderTrendsView() {
@@ -1263,7 +1416,10 @@
         }
 
         function renderTable() {
-            if (currentFilteredData.length === 0) return;
+            if (currentFilteredData.length === 0) {
+                document.getElementById('tableBody').innerHTML = `<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400">No matching rows found.</td></tr>`;
+                return;
+            }
 
             const searchTerm = document.getElementById('playerSearch').value.toLowerCase();
             const filtered = currentFilteredData.filter(row => {
