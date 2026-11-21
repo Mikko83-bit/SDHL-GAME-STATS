@@ -54,7 +54,7 @@
                     <select id="minFaceoffsFilter" class="bg-slate-900 border border-red-800 text-white text-sm rounded px-3 py-1.5 focus:outline-none focus:border-white">
                         <option value="0">0+ (All)</option>
                         <option value="5">5+ Faceoffs</option>
-                        <option value="10">10+ Faceoffs</option>
+                        <option value="10" selected>10+ Faceoffs</option>
                         <option value="20">20+ Faceoffs</option>
                         <option value="50">50+ Faceoffs</option>
                     </select>
@@ -82,21 +82,21 @@
     <!-- Main Content -->
     <main class="max-w-[98%] mx-auto px-2 py-6">
 
-        <!-- Faceoffs OZ & DZ Summary Charts Container -->
-        <div id="faceoffsChartsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8" style="display: none;">
+        <!-- Faceoffs Player OZ & DZ Charts Container -->
+        <div id="faceoffsChartsContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
                 <div class="flex justify-between items-center mb-3">
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-red-400">OZ vs DZ Faceoff Win % Summary</h3>
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-red-400">Players: OZ Win % vs DZ Win %</h3>
                     <span id="foSummaryBadge" class="text-[10px] bg-slate-950 text-slate-300 px-2 py-1 rounded border border-slate-800"></span>
                 </div>
-                <div class="relative h-72">
-                    <canvas id="faceoffsOzDzPctChart"></canvas>
+                <div class="relative h-80">
+                    <canvas id="faceoffsPlayerOzDzChart"></canvas>
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">OZ vs DZ Faceoffs: Won vs Lost</h3>
-                <div class="relative h-72">
-                    <canvas id="faceoffsOzDzCountChart"></canvas>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Players: OZ Won vs DZ Won (Counts)</h3>
+                <div class="relative h-80">
+                    <canvas id="faceoffsPlayerCountChart"></canvas>
                 </div>
             </div>
         </div>
@@ -382,8 +382,8 @@
         let chanceChart2Instance = null;
         let trendChartInstance = null;
         let playerRadarInstance = null;
-        let faceoffsOzDzPctChartInstance = null;
-        let faceoffsOzDzCountChartInstance = null;
+        let faceoffsPlayerOzDzChartInstance = null;
+        let faceoffsPlayerCountChartInstance = null;
 
         const categoryOrder = ['OZ', 'Rush', 'Turnovers', 'Takeaways', 'PP', 'Period 1', 'Period 2', 'Period 3', 'OT', 'Others'];
 
@@ -438,10 +438,10 @@
         }
 
         function getZoneFaceoffStats(row) {
-            // OZ
             const kOzAll = findKey(row, ['faceoffs in oz', 'faceoffs oz', 'oz faceoffs', 'total oz']);
             const kOzWon = findKey(row, ['faceoffs won in oz', 'won in oz', 'oz won', 'oz faceoffs won', 'oz fo won']);
             const kOzLost = findKey(row, ['faceoffs lost in oz', 'lost in oz', 'oz lost', 'oz faceoffs lost', 'oz fo lost']);
+            const kOzPct = findKey(row, ['faceoffs won in oz, %', 'faceoffs won in oz %', 'oz win %', 'oz fo%']);
 
             let ozWon = kOzWon ? parseNum(row[kOzWon]) : 0;
             let ozTotal = kOzAll ? parseNum(row[kOzAll]) : 0;
@@ -453,10 +453,17 @@
                 ozTotal = ozWon + ozLost;
             }
 
-            // DZ
+            let ozPct = 0;
+            if (ozTotal > 0) {
+                ozPct = Number(((ozWon / ozTotal) * 100).toFixed(1));
+            } else if (kOzPct && String(row[kOzPct]).trim() !== '-') {
+                ozPct = Number(parseNum(row[kOzPct]).toFixed(1));
+            }
+
             const kDzAll = findKey(row, ['faceoffs in dz', 'faceoffs dz', 'dz faceoffs', 'total dz']);
             const kDzWon = findKey(row, ['faceoffs won in dz', 'won in dz', 'dz won', 'dz faceoffs won', 'dz fo won']);
             const kDzLost = findKey(row, ['faceoffs lost in dz', 'lost in dz', 'dz lost', 'dz faceoffs lost', 'dz fo lost']);
+            const kDzPct = findKey(row, ['faceoffs won in dz, %', 'faceoffs won in dz %', 'dz win %', 'dz fo%']);
 
             let dzWon = kDzWon ? parseNum(row[kDzWon]) : 0;
             let dzTotal = kDzAll ? parseNum(row[kDzAll]) : 0;
@@ -468,18 +475,31 @@
                 dzTotal = dzWon + dzLost;
             }
 
-            // NZ (optional for total faceoffs count)
+            let dzPct = 0;
+            if (dzTotal > 0) {
+                dzPct = Number(((dzWon / dzTotal) * 100).toFixed(1));
+            } else if (kDzPct && String(row[kDzPct]).trim() !== '-') {
+                dzPct = Number(parseNum(row[kDzPct]).toFixed(1));
+            }
+
             const kNzAll = findKey(row, ['faceoffs in nz', 'faceoffs nz', 'nz faceoffs']);
             const nzTotal = kNzAll ? parseNum(row[kNzAll]) : 0;
+
+            const totalAllZones = ozTotal + dzTotal + nzTotal;
+            const totalWonAll = ozWon + dzWon;
+            const overallPct = totalAllZones > 0 ? Number(((totalWonAll / totalAllZones) * 100).toFixed(1)) : 0;
 
             return {
                 ozWon,
                 ozLost,
                 ozTotal,
+                ozPct,
                 dzWon,
                 dzLost,
                 dzTotal,
-                totalAllZones: ozTotal + dzTotal + nzTotal
+                dzPct,
+                totalAllZones,
+                overallPct
             };
         }
 
@@ -1016,7 +1036,7 @@
                 }
                 currentFilteredData = data;
                 renderTable();
-                renderFaceoffsOzDzCharts(currentFilteredData);
+                renderFaceoffsPlayerCharts(currentFilteredData, minFo);
             } else if (currentTab === 'teams') {
                 document.getElementById('tableTitle').innerText = "Teams SDHL Statistics";
                 currentFilteredData = [...workbookData.teamsRaw];
@@ -1083,65 +1103,50 @@
             }
         }
 
-        function renderFaceoffsOzDzCharts(rows) {
-            if (faceoffsOzDzPctChartInstance) faceoffsOzDzPctChartInstance.destroy();
-            if (faceoffsOzDzCountChartInstance) faceoffsOzDzCountChartInstance.destroy();
+        function renderFaceoffsPlayerCharts(rows, minFo) {
+            if (faceoffsPlayerOzDzChartInstance) faceoffsPlayerOzDzChartInstance.destroy();
+            if (faceoffsPlayerCountChartInstance) faceoffsPlayerCountChartInstance.destroy();
 
-            let ozWon = 0, ozLost = 0, ozTotal = 0;
-            let dzWon = 0, dzLost = 0, dzTotal = 0;
+            const playerKey = findKey(rows[0] || {}, ['player', 'name']) || 'Player';
 
-            rows.forEach(row => {
+            const playerStats = rows.map(row => {
                 const z = getZoneFaceoffStats(row);
-                ozWon += z.ozWon;
-                ozLost += z.ozLost;
-                ozTotal += z.ozTotal;
-
-                dzWon += z.dzWon;
-                dzLost += z.dzLost;
-                dzTotal += z.dzTotal;
+                const name = String(row[playerKey] || 'Unknown');
+                return {
+                    name,
+                    ozPct: z.ozPct,
+                    dzPct: z.dzPct,
+                    ozWon: z.ozWon,
+                    dzWon: z.dzWon,
+                    ozTotal: z.ozTotal,
+                    dzTotal: z.dzTotal,
+                    totalAll: getTotalFaceoffsForRow(row),
+                    overallPct: z.overallPct
+                };
             });
 
-            const ozPct = ozTotal > 0 ? Number(((ozWon / ozTotal) * 100).toFixed(1)) : 0;
-            const dzPct = dzTotal > 0 ? Number(((dzWon / dzTotal) * 100).toFixed(1)) : 0;
+            const sortedByPct = [...playerStats]
+                .sort((a, b) => b.overallPct - a.overallPct || b.totalAll - a.totalAll)
+                .slice(0, 15);
 
-            document.getElementById('foSummaryBadge').innerText = `Rows: ${rows.length} | OZ: ${ozTotal} | DZ: ${dzTotal}`;
+            document.getElementById('foSummaryBadge').innerText = `Min ${minFo}+ FO • Top ${sortedByPct.length} / ${playerStats.length} players`;
 
-            faceoffsOzDzPctChartInstance = new Chart(document.getElementById('faceoffsOzDzPctChart').getContext('2d'), {
+            faceoffsPlayerOzDzChartInstance = new Chart(document.getElementById('faceoffsPlayerOzDzChart').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: ['OZ Faceoff Win %', 'DZ Faceoff Win %'],
-                    datasets: [{
-                        label: 'Win %',
-                        data: [ozPct, dzPct],
-                        backgroundColor: ['#10b981', '#3b82f6']
-                    }]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
-                        datalabels: {
-                            anchor: 'end', align: 'top', color: '#cbd5e1',
-                            font: { size: 11, weight: 'bold' },
-                            formatter: (v) => v + '%'
-                        }
-                    },
-                    scales: {
-                        x: { ticks: { color: '#94a3b8', font: { size: 11 } } },
-                        y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' } }
-                    }
-                }
-            });
-
-            faceoffsOzDzCountChartInstance = new Chart(document.getElementById('faceoffsOzDzCountChart').getContext('2d'), {
-                type: 'bar',
-                plugins: [ChartDataLabels],
-                data: {
-                    labels: ['OZ', 'DZ'],
+                    labels: sortedByPct.map(p => p.name),
                     datasets: [
-                        { label: 'Won', data: [ozWon, dzWon], backgroundColor: '#10b981' },
-                        { label: 'Lost', data: [ozLost, dzLost], backgroundColor: '#ef4444' }
+                        {
+                            label: 'OZ Win %',
+                            data: sortedByPct.map(p => p.ozPct),
+                            backgroundColor: '#10b981'
+                        },
+                        {
+                            label: 'DZ Win %',
+                            data: sortedByPct.map(p => p.dzPct),
+                            backgroundColor: '#3b82f6'
+                        }
                     ]
                 },
                 options: {
@@ -1150,11 +1155,51 @@
                         legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
                         datalabels: {
                             anchor: 'end', align: 'top', color: '#cbd5e1',
-                            font: { size: 10, weight: 'bold' }
+                            font: { size: 8, weight: 'bold' },
+                            formatter: (v) => v > 0 ? v + '%' : ''
                         }
                     },
                     scales: {
-                        x: { ticks: { color: '#94a3b8', font: { size: 11 } } },
+                        x: { ticks: { color: '#94a3b8', font: { size: 9 }, maxRotation: 45, minRotation: 45 } },
+                        y: { min: 0, max: 100, ticks: { color: '#94a3b8', callback: (v) => v + '%' } }
+                    }
+                }
+            });
+
+            const sortedByWins = [...playerStats]
+                .sort((a, b) => (b.ozWon + b.dzWon) - (a.ozWon + a.dzWon))
+                .slice(0, 15);
+
+            faceoffsPlayerCountChartInstance = new Chart(document.getElementById('faceoffsPlayerCountChart').getContext('2d'), {
+                type: 'bar',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: sortedByWins.map(p => p.name),
+                    datasets: [
+                        {
+                            label: 'OZ Won',
+                            data: sortedByWins.map(p => p.ozWon),
+                            backgroundColor: '#10b981'
+                        },
+                        {
+                            label: 'DZ Won',
+                            data: sortedByWins.map(p => p.dzWon),
+                            backgroundColor: '#3b82f6'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
+                        datalabels: {
+                            anchor: 'end', align: 'top', color: '#cbd5e1',
+                            font: { size: 8, weight: 'bold' },
+                            formatter: (v) => v > 0 ? v : ''
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8', font: { size: 9 }, maxRotation: 45, minRotation: 45 } },
                         y: { ticks: { color: '#94a3b8' } }
                     }
                 }
