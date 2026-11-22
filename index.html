@@ -75,7 +75,6 @@
         <!-- Games Summary Tab Section -->
         <div id="gamesSection" class="space-y-6" style="display: none;">
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                <!-- Left: Game List -->
                 <div class="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
                     <div class="flex justify-between items-center mb-3">
                         <h2 class="text-sm font-black uppercase tracking-wider text-red-400">Games</h2>
@@ -86,7 +85,6 @@
                     </div>
                 </div>
 
-                <!-- Right: Selected Game 5v5 Summary -->
                 <div id="gameDetailContainer" class="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
                     <div class="text-xs text-slate-400 py-16 text-center">Select a game on the left to view the 5v5 game summary.</div>
                 </div>
@@ -112,7 +110,6 @@
                 </div>
             </div>
 
-            <!-- 3 Summary KPI Cards -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-slate-950/90 border border-slate-800/90 rounded-lg p-4">
                     <div id="dzSummaryLabel" class="text-[10px] font-bold uppercase tracking-wider text-slate-400">DZ League / Selected Teams</div>
@@ -131,7 +128,6 @@
                 </div>
             </div>
 
-            <!-- DZ & OZ Top 10 Leaderboards -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div class="bg-slate-950/90 border border-slate-800/90 rounded-lg p-4">
                     <div class="flex justify-between items-center mb-3">
@@ -203,7 +199,7 @@
                 <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
                     <div>
                         <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game Scoring Chances Trend & Averages (OZ, Rush, Turnovers, Takeaways)</h2>
-                        <p class="text-xs text-slate-400">Total For vs Total Against across played games with average lines (excluding period totals to avoid double counting)</p>
+                        <p class="text-xs text-slate-400">Total For (A+B) vs Total Against (A+B) across played games with average lines (excluding period totals to avoid double counting)</p>
                     </div>
                     <div id="trendStatsSummary" class="flex gap-4 text-xs font-semibold text-slate-300 bg-slate-950 px-4 py-2 rounded border border-slate-800">
                     </div>
@@ -451,7 +447,11 @@
 
         function formatExcelDate(serial) {
             if (!serial) return '-';
-            if (typeof serial === 'string' && serial.includes('-')) return serial;
+            if (typeof serial === 'string') {
+                const trimmed = serial.trim();
+                if (trimmed.includes(' ')) return trimmed.split(' ')[0];
+                if (trimmed.includes('-')) return trimmed;
+            }
             const utc_days = Math.floor(serial - 25569);
             const utc_value = utc_days * 86400;
             const date_info = new Date(utc_value * 1000);
@@ -488,6 +488,72 @@
             if (val === undefined || val === null || val === '-' || val === '') return 0;
             const n = parseFloat(String(val).replace('%', '').replace(',', '.'));
             return isNaN(n) ? 0 : n;
+        }
+
+        // Älykäs luku: tunnistaa otsikkorivin vaikka yläpuolella olisi tyhjä rivi
+        function sheetToObjectsSmart(sheet, headerHints = ['Date', 'Opponent', 'Descriptor', 'Number']) {
+            if (!sheet) return [];
+            const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+            if (!matrix || matrix.length === 0) return [];
+
+            let headerRowIdx = 0;
+            for (let i = 0; i < Math.min(matrix.length, 10); i++) {
+                const rowVals = (matrix[i] || []).map(v => String(v || '').trim().toLowerCase());
+                if (headerHints.some(h => rowVals.includes(h.toLowerCase()))) {
+                    headerRowIdx = i;
+                    break;
+                }
+            }
+
+            const headers = (matrix[headerRowIdx] || []).map((h, idx) => {
+                const clean = String(h || '').trim();
+                return clean !== '' ? clean : `Col_${idx}`;
+            });
+
+            const result = [];
+            for (let r = headerRowIdx + 1; r < matrix.length; r++) {
+                const rowArr = matrix[r] || [];
+                const hasAnyValue = rowArr.some(v => v !== null && v !== undefined && String(v).trim() !== '');
+                if (!hasAnyValue) continue;
+
+                const obj = {};
+                headers.forEach((h, cIdx) => {
+                    obj[h] = rowArr[cIdx] !== undefined && rowArr[cIdx] !== null ? rowArr[cIdx] : 0;
+                });
+                result.push(obj);
+            }
+            return result;
+        }
+
+        // Uusi A + B -laskenta maalipaikoille (tukee myös vanhaa yksittäistä saraketta)
+        function getChanceForAB(row) {
+            const a = parseNum(row['Chance For A']);
+            const b = parseNum(row['Chance For B']);
+            if (('Chance For A' in row) || ('Chance For B' in row)) {
+                return { a, b, total: a + b };
+            }
+            const legacy = parseNum(row['Chance For']);
+            return { a: 0, b: 0, total: legacy };
+        }
+
+        function getChanceAgainstAB(row) {
+            const a = parseNum(row['Chance Against A']);
+            const b = parseNum(row['Chance Against B']);
+            if (('Chance Against A' in row) || ('Chance Against B' in row)) {
+                return { a, b, total: a + b };
+            }
+            const legacy = parseNum(row['Chance Against']);
+            return { a: 0, b: 0, total: legacy };
+        }
+
+        function getPpChanceForAB(row) {
+            const a = parseNum(row['PP chance A']);
+            const b = parseNum(row['PP chance B']);
+            if (('PP chance A' in row) || ('PP chance B' in row)) {
+                return { a, b, total: a + b };
+            }
+            const legacy = parseNum(row['PP chance']);
+            return { a: 0, b: 0, total: legacy };
         }
 
         function getZoneFaceoffStats(row) {
@@ -604,13 +670,11 @@
                 .map(g => {
                     const statsA = summarizeTeam(g.rows, g.teamA);
                     const statsB = summarizeTeam(g.rows, g.teamB);
-                    const totalSog = statsA.sog + statsB.sog;
                     return {
                         key: g.key,
                         date: g.date,
                         statsA,
-                        statsB,
-                        sogShareA: totalSog > 0 ? Math.round((statsA.sog / totalSog) * 100) : 50
+                        statsB
                     };
                 });
         }
@@ -686,7 +750,6 @@
                         </div>
                     </div>
 
-                    <!-- Scoreboard Banner -->
                     <div class="grid grid-cols-3 items-center bg-slate-950 border border-slate-800 rounded-xl p-5 text-center">
                         <div>
                             <div class="text-sm font-black uppercase text-red-400">${a.team}</div>
@@ -703,7 +766,6 @@
                         </div>
                     </div>
 
-                    <!-- Key Comparison Metrics -->
                     <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
                         <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Team Comparison</div>
                         ${metricRows.map(m => {
@@ -727,7 +789,6 @@
                         }).join('')}
                     </div>
 
-                    <!-- Top Game Score Players -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="bg-slate-950 border border-slate-800 rounded-xl p-4">
                             <div class="text-[10px] font-bold uppercase text-red-400">Top Game Score · ${a.team}</div>
@@ -828,7 +889,7 @@
             document.getElementById('minFaceoffsFilter').addEventListener('change', renderCurrentView);
 
             try {
-                const response = await fetch('Sdhl Game score 2026-2027.xlsx');
+                const response = await fetch(encodeURI('Sdhl Game score 2026-2027.xlsx'));
                 if (response.ok) {
                     const arrayBuffer = await response.arrayBuffer();
                     processMainExcel(arrayBuffer);
@@ -838,10 +899,13 @@
             }
 
             try {
-                const response2 = await fetch('SDHL 2026-2027 scoring chances.xlsx');
-                if (response2.ok) {
-                    const arrayBuffer2 = await response2.arrayBuffer();
-                    processChancesExcel(arrayBuffer2);
+                for (const fname of ['SDHL scoring chances 2026-2027.xlsx', 'SDHL 2026-2027 scoring chances.xlsx']) {
+                    const response2 = await fetch(encodeURI(fname));
+                    if (response2.ok) {
+                        const arrayBuffer2 = await response2.arrayBuffer();
+                        processChancesExcel(arrayBuffer2);
+                        break;
+                    }
                 }
             } catch (e) {
                 console.log('Chances excel load manual.');
@@ -854,7 +918,13 @@
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const arrayBuffer = event.target.result;
-                    if (file.name.toLowerCase().includes('chance')) {
+                    const data = new Uint8Array(arrayBuffer);
+                    const wb = XLSX.read(data, { type: 'array' });
+
+                    const hasChancesSheets = wb.SheetNames.includes('Player') || wb.SheetNames.includes('Players') || wb.SheetNames.includes('Team');
+                    const hasMainSheets = wb.SheetNames.includes('SDHL GAME SCORE') || wb.SheetNames.includes('Faceoffs') || wb.SheetNames.includes('Teams SDHL');
+
+                    if (hasChancesSheets && !hasMainSheets) {
                         processChancesExcel(arrayBuffer);
                     } else {
                         processMainExcel(arrayBuffer);
@@ -920,8 +990,9 @@
             const data = new Uint8Array(arrayBuffer);
             const workbook = XLSX.read(data, { type: 'array' });
 
-            if (workbook.Sheets['Players']) {
-                workbookData.chancesPlayersRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Players'], { defval: 0 });
+            const playerSheet = workbook.Sheets['Player'] || workbook.Sheets['Players'];
+            if (playerSheet) {
+                workbookData.chancesPlayersRaw = sheetToObjectsSmart(playerSheet, ['Date', 'Opponent', 'Number', 'Goal For']);
                 workbookData.chancesPlayersRaw.forEach(row => {
                     if (row['Date']) row['Date'] = formatExcelDate(row['Date']);
                     if (row['Opponent']) row['Opponent'] = normalizeTeamName(row['Opponent']);
@@ -929,7 +1000,7 @@
             }
 
             if (workbook.Sheets['Team']) {
-                workbookData.chancesTeamRaw = XLSX.utils.sheet_to_json(workbook.Sheets['Team'], { defval: 0 });
+                workbookData.chancesTeamRaw = sheetToObjectsSmart(workbook.Sheets['Team'], ['Date', 'Opponent', 'Descriptor', 'Goal For']);
                 workbookData.chancesTeamRaw.forEach(row => {
                     if (row['Date']) row['Date'] = formatExcelDate(row['Date']);
                     if (row['Opponent']) row['Opponent'] = normalizeTeamName(row['Opponent']);
@@ -1036,36 +1107,46 @@
             });
 
             const gameInfoMap = {};
+            const getGameLabelKey = (row) => row['Game'] ? String(row['Game']) : `${row['Date'] || ''}___${row['Opponent'] || ''}`;
+
             workbookData.chancesTeamRaw.forEach(row => {
-                if (row['Game']) {
-                    gameInfoMap[String(row['Game'])] = {
+                const gk = getGameLabelKey(row);
+                if (gk && gk !== '___') {
+                    gameInfoMap[gk] = {
                         opponent: row['Opponent'] || '',
-                        date: row['Date'] || ''
+                        date: row['Date'] || '',
+                        gameNum: row['Game'] || ''
                     };
                 }
             });
             workbookData.chancesPlayersRaw.forEach(row => {
-                if (row['Game'] && !gameInfoMap[String(row['Game'])]) {
-                    gameInfoMap[String(row['Game'])] = {
+                const gk = getGameLabelKey(row);
+                if (gk && gk !== '___' && !gameInfoMap[gk]) {
+                    gameInfoMap[gk] = {
                         opponent: row['Opponent'] || '',
-                        date: row['Date'] || ''
+                        date: row['Date'] || '',
+                        gameNum: row['Game'] || ''
                     };
                 }
             });
 
-            const gamesSet = new Set();
-            workbookData.chancesPlayersRaw.forEach(row => {
-                if (row['Game']) gamesSet.add(String(row['Game']));
+            const gamesArray = Object.keys(gameInfoMap).sort((a, b) => {
+                const infoA = gameInfoMap[a];
+                const infoB = gameInfoMap[b];
+                if (infoA.gameNum && infoB.gameNum && !isNaN(Number(infoA.gameNum)) && !isNaN(Number(infoB.gameNum))) {
+                    return Number(infoA.gameNum) - Number(infoB.gameNum);
+                }
+                return String(infoA.date).localeCompare(String(infoB.date));
             });
-            const gamesArray = Array.from(gamesSet).sort((a,b) => Number(a)-Number(b));
-            
+
             const selectGame = document.getElementById('filterChancesGamesMulti');
             if (selectGame) {
                 const curSelected = Array.from(selectGame.selectedOptions).map(o => o.value);
-                selectGame.innerHTML = gamesArray.map(g => {
-                    const info = gameInfoMap[g];
-                    const label = (info && info.opponent && info.date) ? `Game ${g} (${info.opponent} - ${info.date})` : `Game ${g}`;
-                    return `<option value="${g}">${label}</option>`;
+                selectGame.innerHTML = gamesArray.map(gk => {
+                    const info = gameInfoMap[gk];
+                    const prefix = info.gameNum ? `Game ${info.gameNum}` : (info.date || 'Game');
+                    const label = (info.opponent && info.date) ? `${prefix} (${info.opponent} - ${info.date})` : prefix;
+                    return `<option value="${gk}">${label}</option>`;
                 }).join('');
                 Array.from(selectGame.options).forEach(opt => {
                     if (curSelected.includes(opt.value)) opt.selected = true;
@@ -1078,7 +1159,7 @@
 
             let rawFiltered = workbookData.chancesPlayersRaw;
             if (selectedGames.length > 0) {
-                rawFiltered = rawFiltered.filter(row => selectedGames.includes(String(row['Game'])));
+                rawFiltered = rawFiltered.filter(row => selectedGames.includes(getGameLabelKey(row)));
             }
 
             const aggregated = {};
@@ -1087,6 +1168,9 @@
                 if (!num || num === '0') return;
 
                 const playerName = numToPlayer[num] || `Player #${num}`;
+                const cfAB = getChanceForAB(row);
+                const caAB = getChanceAgainstAB(row);
+                const ppAB = getPpChanceForAB(row);
 
                 if (!aggregated[playerName]) {
                     aggregated[playerName] = {
@@ -1094,42 +1178,55 @@
                         'Name': playerName,
                         'Goal For': 0,
                         'Goal For inv': 0,
+                        'Chance For A': 0,
+                        'Chance For B': 0,
                         'Chance For': 0,
                         'Chance For inv': 0,
                         'PP goal': 0,
                         'PP goal inv': 0,
+                        'PP chance A': 0,
+                        'PP chance B': 0,
                         'PP chance': 0,
                         'PP chance inv': 0,
                         'Goal Against': 0,
+                        'Chance Against A': 0,
+                        'Chance Against B': 0,
                         'Chance Against': 0,
                         'PP goal ag': 0,
                         'PP chance ag': 0
                     };
                 }
-                aggregated[playerName]['Goal For'] += Number(row['Goal For']) || 0;
-                aggregated[playerName]['Goal For inv'] += Number(row['Goal For inv']) || 0;
-                aggregated[playerName]['Chance For'] += Number(row['Chance For']) || 0;
-                aggregated[playerName]['Chance For inv'] += Number(row['Chance For inv']) || 0;
-                aggregated[playerName]['PP goal'] += Number(row['PP goal']) || 0;
-                aggregated[playerName]['PP goal inv'] += Number(row['PP goal inv']) || 0;
-                aggregated[playerName]['PP chance'] += Number(row['PP chance']) || 0;
-                aggregated[playerName]['PP chance inv'] += Number(row['PP chance inv']) || 0;
-                aggregated[playerName]['Goal Against'] += Number(row['Goal Against']) || 0;
-                aggregated[playerName]['Chance Against'] += Number(row['Chance Against']) || 0;
-                aggregated[playerName]['PP goal ag'] += Number(row['PP goal ag']) || 0;
-                aggregated[playerName]['PP chance ag'] += Number(row['PP chance ag']) || 0;
+                aggregated[playerName]['Goal For'] += parseNum(row['Goal For']);
+                aggregated[playerName]['Goal For inv'] += parseNum(row['Goal For inv']);
+                aggregated[playerName]['Chance For A'] += cfAB.a;
+                aggregated[playerName]['Chance For B'] += cfAB.b;
+                aggregated[playerName]['Chance For'] += cfAB.total;
+                aggregated[playerName]['Chance For inv'] += parseNum(row['Chance For inv']);
+                aggregated[playerName]['PP goal'] += parseNum(row['PP goal']);
+                aggregated[playerName]['PP goal inv'] += parseNum(row['PP goal inv']);
+                aggregated[playerName]['PP chance A'] += ppAB.a;
+                aggregated[playerName]['PP chance B'] += ppAB.b;
+                aggregated[playerName]['PP chance'] += ppAB.total;
+                aggregated[playerName]['PP chance inv'] += parseNum(row['PP chance inv']);
+                aggregated[playerName]['Goal Against'] += parseNum(row['Goal Against']);
+                aggregated[playerName]['Chance Against A'] += caAB.a;
+                aggregated[playerName]['Chance Against B'] += caAB.b;
+                aggregated[playerName]['Chance Against'] += caAB.total;
+                aggregated[playerName]['PP goal ag'] += parseNum(row['PP goal ag']);
+                aggregated[playerName]['PP chance ag'] += parseNum(row['PP chance ag']);
             });
 
             let teamTotalChancesFor = 0;
             let teamTotalGoalsFor = 0;
 
             workbookData.chancesTeamRaw.forEach(row => {
-                if (selectedGames.length > 0 && !selectedGames.includes(String(row['Game']))) return;
+                if (selectedGames.length > 0 && !selectedGames.includes(getGameLabelKey(row))) return;
                 const cat = getDescriptorCategory(row['Descriptor']);
                 if (isPeriodCategory(cat)) return;
 
-                teamTotalChancesFor += (Number(row['Goal For']) || 0) + (Number(row['Chance For']) || 0);
-                teamTotalGoalsFor += (Number(row['Goal For']) || 0);
+                const cfAB = getChanceForAB(row);
+                teamTotalChancesFor += parseNum(row['Goal For']) + cfAB.total;
+                teamTotalGoalsFor += parseNum(row['Goal For']);
             });
 
             Object.values(aggregated).forEach(row => {
@@ -1284,7 +1381,7 @@
             } else if (currentTab === 'chances') {
                 buildChancesData();
                 if (chancesSub === 'players') {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Player Stats (5v5 Net Score & Team Shares)";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Player Stats (A + B Chances, 5v5 Net Score & Team Shares)";
                     const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
                     let data = [...workbookData.chancesPlayersAggregated];
                     if (selectedPlayers.length > 0) {
@@ -1294,26 +1391,45 @@
                     renderTable();
                     renderChancesPlayerCharts();
                 } else {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Areas & Play Styles (OZ, Rush, Turnovers, Takeaways, PP...) - Click category row for breakdown";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Areas & Play Styles (A + B Chances) - Click category row for breakdown";
                     
                     const selectedCategories = Array.from(document.getElementById('filterCategoryMulti').selectedOptions).map(opt => opt.value);
                     const selectedGames = Array.from(document.getElementById('filterChancesGamesMulti').selectedOptions).map(opt => opt.value);
 
+                    const getGameLabelKey = (row) => row['Game'] ? String(row['Game']) : `${row['Date'] || ''}___${row['Opponent'] || ''}`;
+
                     let teamRaw = workbookData.chancesTeamRaw;
                     if (selectedGames.length > 0) {
-                        teamRaw = teamRaw.filter(row => selectedGames.includes(String(row['Game'])));
+                        teamRaw = teamRaw.filter(row => selectedGames.includes(getGameLabelKey(row)));
                     }
 
                     const catMap = {};
                     teamRaw.forEach(row => {
                         const cat = getDescriptorCategory(row['Descriptor']);
+                        const cfAB = getChanceForAB(row);
+                        const caAB = getChanceAgainstAB(row);
+
                         if (!catMap[cat]) {
-                            catMap[cat] = { 'Category / Area': cat, 'Goal For': 0, 'Chance For': 0, 'Goal Against': 0, 'Chance Against': 0 };
+                            catMap[cat] = {
+                                'Category / Area': cat,
+                                'Goal For': 0,
+                                'Chance For A': 0,
+                                'Chance For B': 0,
+                                'Chance For': 0,
+                                'Goal Against': 0,
+                                'Chance Against A': 0,
+                                'Chance Against B': 0,
+                                'Chance Against': 0
+                            };
                         }
-                        catMap[cat]['Goal For'] += Number(row['Goal For']) || 0;
-                        catMap[cat]['Chance For'] += Number(row['Chance For']) || 0;
-                        catMap[cat]['Goal Against'] += Number(row['Goal Against']) || 0;
-                        catMap[cat]['Chance Against'] += Number(row['Chance Against']) || 0;
+                        catMap[cat]['Goal For'] += parseNum(row['Goal For']);
+                        catMap[cat]['Chance For A'] += cfAB.a;
+                        catMap[cat]['Chance For B'] += cfAB.b;
+                        catMap[cat]['Chance For'] += cfAB.total;
+                        catMap[cat]['Goal Against'] += parseNum(row['Goal Against']);
+                        catMap[cat]['Chance Against A'] += caAB.a;
+                        catMap[cat]['Chance Against B'] += caAB.b;
+                        catMap[cat]['Chance Against'] += caAB.total;
                     });
 
                     let arr = Object.values(catMap);
@@ -1423,11 +1539,15 @@
             if (trendChartInstance) trendChartInstance.destroy();
 
             const gameInfoMap = {};
+            const getGameLabelKey = (row) => row['Game'] ? String(row['Game']) : `${row['Date'] || ''}___${row['Opponent'] || ''}`;
+
             workbookData.chancesTeamRaw.forEach(row => {
-                if (row['Game']) {
-                    gameInfoMap[String(row['Game'])] = {
+                const gk = getGameLabelKey(row);
+                if (gk && gk !== '___') {
+                    gameInfoMap[gk] = {
                         opponent: row['Opponent'] || '',
-                        date: row['Date'] || ''
+                        date: row['Date'] || '',
+                        gameNum: row['Game'] || ''
                     };
                 }
             });
@@ -1439,26 +1559,39 @@
                 const descCat = getDescriptorCategory(row['Descriptor']);
                 if (!validCats.includes(descCat) || isPeriodCategory(descCat)) return;
 
-                const g = String(row['Game']);
-                if (!g || g === 'undefined' || g === '0') return;
+                const gk = getGameLabelKey(row);
+                if (!gk || gk === '___' || gk === 'undefined' || gk === '0') return;
 
-                if (!gameMap[g]) {
-                    gameMap[g] = { game: g, totalFor: 0, totalAgainst: 0 };
+                if (!gameMap[gk]) {
+                    gameMap[gk] = { key: gk, totalFor: 0, totalAgainst: 0 };
                 }
 
-                const gf = Number(row['Goal For']) || 0;
-                const cf = Number(row['Chance For']) || 0;
-                const ga = Number(row['Goal Against']) || 0;
-                const ca = Number(row['Chance Against']) || 0;
+                const cfAB = getChanceForAB(row);
+                const caAB = getChanceAgainstAB(row);
 
-                gameMap[g].totalFor += (gf + cf);
-                gameMap[g].totalAgainst += (ga + ca);
+                const gf = parseNum(row['Goal For']);
+                const cf = cfAB.total;
+                const ga = parseNum(row['Goal Against']);
+                const ca = caAB.total;
+
+                gameMap[gk].totalFor += (gf + cf);
+                gameMap[gk].totalAgainst += (ga + ca);
             });
 
-            const gamesArr = Object.values(gameMap).sort((a, b) => Number(a.game) - Number(b.game));
+            const gamesArr = Object.values(gameMap).sort((a, b) => {
+                const infoA = gameInfoMap[a.key] || {};
+                const infoB = gameInfoMap[b.key] || {};
+                if (infoA.gameNum && infoB.gameNum && !isNaN(Number(infoA.gameNum)) && !isNaN(Number(infoB.gameNum))) {
+                    return Number(infoA.gameNum) - Number(infoB.gameNum);
+                }
+                return String(infoA.date || a.key).localeCompare(String(infoB.date || b.key));
+            });
+
             const labels = gamesArr.map(item => {
-                const info = gameInfoMap[item.game];
-                return (info && info.opponent && info.date) ? `Game ${item.game} (${info.opponent} - ${info.date})` : `Game ${item.game}`;
+                const info = gameInfoMap[item.key];
+                if (info && info.gameNum && info.opponent && info.date) return `Game ${info.gameNum} (${info.opponent} - ${info.date})`;
+                if (info && info.opponent && info.date) return `${info.date} (${info.opponent})`;
+                return item.key;
             });
             const dataFor = gamesArr.map(item => item.totalFor);
             const dataAgainst = gamesArr.map(item => item.totalAgainst);
@@ -1716,7 +1849,7 @@
 
         function renderTable() {
             if (currentFilteredData.length === 0) {
-                document.getElementById('tableBody').innerHTML = `<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400">No matching rows found.</td></tr>`;
+                document.getElementById('tableBody').innerHTML = `<tr><td colspan="25" class="px-4 py-6 text-center text-slate-400">No matching rows found.</td></tr>`;
                 return;
             }
 
@@ -1729,7 +1862,7 @@
             const headers = Object.keys(currentFilteredData[0]);
             
             const headerTr = document.getElementById('tableHeader');
-            headerTr.innerHTML = headers.map((h, index) => {
+            headerTr.innerHTML = headers.map((h) => {
                 let stickyClass = '';
                 if (currentTab === 'players' || currentTab === 'faceoffs') {
                     if (h === 'Team') stickyClass = 'sticky-col-team';
@@ -1746,7 +1879,7 @@
                 const playerName = row['Player'] || row['Name'];
                 const categoryName = row['Category / Area'];
                 return `<tr class="hover:bg-slate-800/50 transition">` + 
-                    headers.map((h, index) => {
+                    headers.map((h) => {
                         let val = row[h] !== undefined ? row[h] : '-';
                         if (typeof val === 'number' && !Number.isInteger(val)) {
                             val = val.toFixed(2);
@@ -1768,10 +1901,14 @@
                                 stickyClass = Number(val) > 0 ? 'text-emerald-400 font-bold' : (Number(val) < 0 ? 'text-rose-400 font-bold' : '');
                             } else if (h === '5v5 SC %' || h === '5v5 Goal %') {
                                 stickyClass = 'text-emerald-400 font-bold';
+                            } else if (h === 'Chance For' || h === 'Chance Against') {
+                                stickyClass = 'font-bold text-white';
                             }
                         } else if (currentTab === 'chances' && chancesSub === 'team') {
                             if (h === 'Category / Area') {
                                 return `<td class="px-3 py-2 text-red-400 font-bold cursor-pointer hover:underline" onclick="openCategoryModal('${categoryName}')">${val}</td>`;
+                            } else if (h === 'Chance For' || h === 'Chance Against') {
+                                stickyClass = 'font-bold text-white';
                             }
                         } else if (currentTab === 'teams' || currentTab === 'lines') {
                             if (h === 'Team') stickyClass = 'sticky-col-team text-red-400 font-bold';
@@ -1895,18 +2032,20 @@
 
         function openChancesPlayerModal(playerName) {
             document.getElementById('modalPlayerName').innerText = `Scoring Chances & Team Share %: ${playerName}`;
-            document.getElementById('modalSubtitle').innerText = "Game-by-game scoring chances breakdown & team share percentages (including inv)";
+            document.getElementById('modalSubtitle').innerText = "Game-by-game scoring chances breakdown (A + B + inv) & team share percentages";
             
             document.getElementById('modalSummaryContainer').style.display = 'block';
             document.getElementById('modalRadarContainer').style.display = 'none';
 
+            const numToPlayer = {};
+            workbookData.playersRaw.filter(p => p['Team'] === 'Lulea').forEach(p => {
+                numToPlayer[String(p['Shirt number']).trim()] = p['Player'];
+            });
+
             const playerRows = workbookData.chancesPlayersRaw.filter(row => {
                 const num = String(row['Number']).trim();
-                const numToPlayer = {};
-                workbookData.playersRaw.filter(p => p['Team'] === 'Lulea').forEach(p => {
-                    numToPlayer[String(p['Shirt number']).trim()] = p['Player'];
-                });
-                return (numToPlayer[num] === playerName);
+                const mapped = numToPlayer[num] || `Player #${num}`;
+                return mapped === playerName;
             });
 
             if (playerRows.length === 0) {
@@ -1914,24 +2053,30 @@
                 return;
             }
 
-            let pGF = 0, pGFI = 0, pCF = 0, pCFI = 0, pGA = 0, pCA = 0;
+            let pGF = 0, pGFI = 0, pCFA = 0, pCFB = 0, pCFI = 0, pGA = 0, pCAA = 0, pCAB = 0;
             playerRows.forEach(r => {
-                pGF += Number(r['Goal For'] || 0);
-                pGFI += Number(r['Goal For inv'] || 0);
-                pCF += Number(r['Chance For'] || 0);
-                pCFI += Number(r['Chance For inv'] || 0);
-                pGA += Number(r['Goal Against'] || 0);
-                pCA += Number(r['Chance Against'] || 0);
+                const cfAB = getChanceForAB(r);
+                const caAB = getChanceAgainstAB(r);
+                pGF += parseNum(r['Goal For']);
+                pGFI += parseNum(r['Goal For inv']);
+                pCFA += cfAB.a;
+                pCFB += cfAB.b;
+                pCFI += parseNum(r['Chance For inv']);
+                pGA += parseNum(r['Goal Against']);
+                pCAA += caAB.a;
+                pCAB += caAB.b;
             });
 
-            const pForSum = pGF + pGFI + pCF + pCFI;
+            const pChanceForTotal = pCFA + pCFB;
+            const pChanceAgainstTotal = pCAA + pCAB;
+            const pForSum = pGF + pGFI + pChanceForTotal + pCFI;
             const pGoalsFor = pGF + pGFI;
             const teamTotalC = workbookData.teamTotalChancesFor || 1;
             const teamTotalG = workbookData.teamTotalGoalsFor || 1;
 
             const shareSC = ((pForSum / teamTotalC) * 100).toFixed(1) + '%';
             const shareGoal = ((pGoalsFor / teamTotalG) * 100).toFixed(1) + '%';
-            const netScore = pForSum - (pGA + pCA);
+            const netScore = pForSum - (pGA + pChanceAgainstTotal);
 
             document.getElementById('summaryScPct').innerText = shareSC;
             document.getElementById('summaryScSub').innerText = `Pelaajan SC ${pForSum} / Joukkueen SC ${teamTotalC}`;
@@ -1940,24 +2085,35 @@
             document.getElementById('summaryNetScore').innerText = (netScore > 0 ? '+' : '') + netScore;
 
             const displayRows = playerRows.map(r => {
-                const forSum = Number(r['Goal For']||0) + Number(r['Goal For inv']||0) + Number(r['Chance For']||0) + Number(r['Chance For inv']||0);
-                const agSum = Number(r['Goal Against']||0) + Number(r['Chance Against']||0);
-                const gFor = Number(r['Goal For']||0) + Number(r['Goal For inv']||0);
+                const cfAB = getChanceForAB(r);
+                const caAB = getChanceAgainstAB(r);
+                const gf = parseNum(r['Goal For']);
+                const gfi = parseNum(r['Goal For inv']);
+                const cfi = parseNum(r['Chance For inv']);
+                const ga = parseNum(r['Goal Against']);
+
+                const forSum = gf + gfi + cfAB.total + cfi;
+                const agSum = ga + caAB.total;
+                const gFor = gf + gfi;
 
                 const scPct = teamTotalC > 0 ? ((forSum / teamTotalC) * 100).toFixed(1) + '%' : '0.0%';
                 const gPct = teamTotalG > 0 ? ((gFor / teamTotalG) * 100).toFixed(1) + '%' : '0.0%';
 
-                const gNum = r['Game'] || '-';
+                const gNum = r['Game'] ? `Game ${r['Game']}` : (r['Date'] || '-');
                 const opp = r['Opponent'] ? ` (${r['Opponent']})` : '';
 
                 return {
-                    'Game': `Game ${gNum}${opp}`,
-                    'Goal For': r['Goal For'],
-                    'Goal For inv': r['Goal For inv'],
-                    'Chance For': r['Chance For'],
-                    'Chance For inv': r['Chance For inv'],
-                    'Goal Against': r['Goal Against'],
-                    'Chance Against': r['Chance Against'],
+                    'Game': `${gNum}${opp}`,
+                    'Goal For': gf,
+                    'Goal For inv': gfi,
+                    'Chance For A': cfAB.a,
+                    'Chance For B': cfAB.b,
+                    'Chance For': cfAB.total,
+                    'Chance For inv': cfi,
+                    'Goal Against': ga,
+                    'Chance Against A': caAB.a,
+                    'Chance Against B': caAB.b,
+                    'Chance Against': caAB.total,
                     '5v5 Net Score': forSum - agSum,
                     '5v5 SC %': scPct,
                     '5v5 Goal %': gPct
@@ -1980,7 +2136,7 @@
 
         function openCategoryModal(categoryName) {
             document.getElementById('modalPlayerName').innerText = `Category Breakdown: ${categoryName}`;
-            document.getElementById('modalSubtitle').innerText = "Detailed sub-descriptors breakdown";
+            document.getElementById('modalSubtitle').innerText = "Detailed sub-descriptors breakdown (A + B Chances)";
 
             document.getElementById('modalSummaryContainer').style.display = 'none';
             document.getElementById('modalRadarContainer').style.display = 'none';
@@ -1997,19 +2153,30 @@
             const descMap = {};
             matchingRows.forEach(row => {
                 const desc = row['Descriptor'] || 'Unknown';
+                const cfAB = getChanceForAB(row);
+                const caAB = getChanceAgainstAB(row);
+
                 if (!descMap[desc]) {
                     descMap[desc] = {
                         'Descriptor': desc,
                         'Goal For': 0,
+                        'Chance For A': 0,
+                        'Chance For B': 0,
                         'Chance For': 0,
                         'Goal Against': 0,
+                        'Chance Against A': 0,
+                        'Chance Against B': 0,
                         'Chance Against': 0
                     };
                 }
-                descMap[desc]['Goal For'] += Number(row['Goal For']) || 0;
-                descMap[desc]['Chance For'] += Number(row['Chance For']) || 0;
-                descMap[desc]['Goal Against'] += Number(row['Goal Against']) || 0;
-                descMap[desc]['Chance Against'] += Number(row['Chance Against']) || 0;
+                descMap[desc]['Goal For'] += parseNum(row['Goal For']);
+                descMap[desc]['Chance For A'] += cfAB.a;
+                descMap[desc]['Chance For B'] += cfAB.b;
+                descMap[desc]['Chance For'] += cfAB.total;
+                descMap[desc]['Goal Against'] += parseNum(row['Goal Against']);
+                descMap[desc]['Chance Against A'] += caAB.a;
+                descMap[desc]['Chance Against B'] += caAB.b;
+                descMap[desc]['Chance Against'] += caAB.total;
             });
 
             const displayRows = Object.values(descMap).sort((a, b) => (b['Goal For'] + b['Chance For']) - (a['Goal For'] + a['Chance For']));
@@ -2328,7 +2495,7 @@
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            document.getElementById('chanceChart1Title').innerText = "Luleå Players: 5v5 Net Score (Goals & Chances)";
+            document.getElementById('chanceChart1Title').innerText = "Luleå Players: 5v5 Net Score (Goals & A+B Chances)";
             document.getElementById('chanceChart2Title').innerText = "Luleå Players: Goals (Goal For vs Against)";
 
             const sorted = [...currentFilteredData].sort((a, b) => b['5v5 Net Score'] - a['5v5 Net Score']).slice(0, 10);
@@ -2381,7 +2548,7 @@
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            document.getElementById('chanceChart1Title').innerText = "Areas & Play Styles: Scoring Chances (Chance For vs Against)";
+            document.getElementById('chanceChart1Title').innerText = "Areas & Play Styles: Scoring Chances (Chance For A+B vs Against A+B)";
             document.getElementById('chanceChart2Title').innerText = "Areas & Play Styles: Goals (Goal For vs Against)";
 
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
@@ -2390,8 +2557,8 @@
                 data: {
                     labels: currentFilteredData.map(d => d['Category / Area']),
                     datasets: [
-                        { label: 'Chance For', data: currentFilteredData.map(d => d['Chance For']), backgroundColor: '#3b82f6' },
-                        { label: 'Chance Against', data: currentFilteredData.map(d => d['Chance Against']), backgroundColor: '#ef4444' }
+                        { label: 'Chance For (A+B)', data: currentFilteredData.map(d => d['Chance For']), backgroundColor: '#3b82f6' },
+                        { label: 'Chance Against (A+B)', data: currentFilteredData.map(d => d['Chance Against']), backgroundColor: '#ef4444' }
                     ]
                 },
                 options: {
