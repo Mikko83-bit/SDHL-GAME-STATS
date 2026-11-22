@@ -193,6 +193,43 @@
             </div>
         </div>
 
+        <!-- A vs B Summary Bar (Play Styles / Areas) -->
+        <div id="chancesABSummaryBar" style="display: none;" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-[11px] font-black uppercase tracking-wider text-blue-400">Chance For — A vs B (Excl. Periods)</span>
+                    <span id="abForTotalBadge" class="text-xs font-bold text-white bg-slate-950 border border-slate-800 px-2.5 py-0.5 rounded">Total: 0</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3 text-center">
+                    <div class="bg-slate-950 border border-slate-800/80 rounded p-2.5">
+                        <div class="text-[10px] uppercase font-bold text-slate-400">Chance For A</div>
+                        <div id="sumChanceForA" class="text-xl font-black text-blue-400 mt-0.5">0</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800/80 rounded p-2.5">
+                        <div class="text-[10px] uppercase font-bold text-slate-400">Chance For B</div>
+                        <div id="sumChanceForB" class="text-xl font-black text-sky-300 mt-0.5">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-[11px] font-black uppercase tracking-wider text-rose-400">Chance Against — A vs B (Excl. Periods)</span>
+                    <span id="abAgainstTotalBadge" class="text-xs font-bold text-white bg-slate-950 border border-slate-800 px-2.5 py-0.5 rounded">Total: 0</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3 text-center">
+                    <div class="bg-slate-950 border border-slate-800/80 rounded p-2.5">
+                        <div class="text-[10px] uppercase font-bold text-slate-400">Chance Against A</div>
+                        <div id="sumChanceAgainstA" class="text-xl font-black text-rose-400 mt-0.5">0</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800/80 rounded p-2.5">
+                        <div class="text-[10px] uppercase font-bold text-slate-400">Chance Against B</div>
+                        <div id="sumChanceAgainstB" class="text-xl font-black text-amber-400 mt-0.5">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Trends Section -->
         <div id="trendsSection" class="space-y-6" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
@@ -365,7 +402,6 @@
                 <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl font-bold px-2 py-1">&times;</button>
             </div>
             
-            <!-- Yhteenvetokortti -->
             <div id="modalSummaryContainer" class="p-4 bg-slate-950/80 border-b border-slate-800" style="display: none;">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                     <div class="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow">
@@ -386,7 +422,6 @@
                 </div>
             </div>
 
-            <!-- Tavallinen tutka-kaavio -->
             <div id="modalRadarContainer" class="p-4 bg-slate-950/50 border-b border-slate-800 flex justify-center items-center">
                 <div class="relative h-64 w-full max-w-md">
                     <canvas id="playerRadarChart"></canvas>
@@ -490,7 +525,6 @@
             return isNaN(n) ? 0 : n;
         }
 
-        // Älykäs luku: tunnistaa otsikkorivin vaikka yläpuolella olisi tyhjä rivi
         function sheetToObjectsSmart(sheet, headerHints = ['Date', 'Opponent', 'Descriptor', 'Number']) {
             if (!sheet) return [];
             const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
@@ -525,7 +559,6 @@
             return result;
         }
 
-        // Uusi A + B -laskenta maalipaikoille (tukee myös vanhaa yksittäistä saraketta)
         function getChanceForAB(row) {
             const a = parseNum(row['Chance For A']);
             const b = parseNum(row['Chance For B']);
@@ -1322,6 +1355,7 @@
             document.getElementById('comparisonSection').style.display = (tabName === 'compare') ? 'block' : 'none';
             document.getElementById('trendsSection').style.display = (tabName === 'trends') ? 'block' : 'none';
             document.getElementById('chancesFiltersBar').style.display = (tabName === 'chances') ? 'grid' : 'none';
+            document.getElementById('chancesABSummaryBar').style.display = (tabName === 'chances' && chancesSub === 'team') ? 'grid' : 'none';
 
             document.getElementById('gameFilterContainer').style.display = (tabName === 'players') ? 'block' : 'none';
             document.getElementById('teamFilterContainer').style.display = (tabName === 'teams' || tabName === 'compare' || tabName === 'chances' || tabName === 'trends') ? 'none' : 'block';
@@ -1342,8 +1376,25 @@
             
             document.getElementById('playerMultiSelectContainer').style.display = (sub === 'players') ? 'block' : 'none';
             document.getElementById('categoryMultiSelectContainer').style.display = (sub === 'team') ? 'block' : 'none';
+            document.getElementById('chancesABSummaryBar').style.display = (currentTab === 'chances' && sub === 'team') ? 'grid' : 'none';
 
             renderCurrentView();
+        }
+
+        function updateChancesABSummary(rows) {
+            const nonPeriodRows = (rows || []).filter(r => !isPeriodCategory(r['Category / Area']));
+            const forA = nonPeriodRows.reduce((acc, r) => acc + parseNum(r['Chance For A']), 0);
+            const forB = nonPeriodRows.reduce((acc, r) => acc + parseNum(r['Chance For B']), 0);
+            const agA = nonPeriodRows.reduce((acc, r) => acc + parseNum(r['Chance Against A']), 0);
+            const agB = nonPeriodRows.reduce((acc, r) => acc + parseNum(r['Chance Against B']), 0);
+
+            document.getElementById('sumChanceForA').innerText = forA;
+            document.getElementById('sumChanceForB').innerText = forB;
+            document.getElementById('abForTotalBadge').innerText = `Total: ${forA + forB}`;
+
+            document.getElementById('sumChanceAgainstA').innerText = agA;
+            document.getElementById('sumChanceAgainstB').innerText = agB;
+            document.getElementById('abAgainstTotalBadge').innerText = `Total: ${agA + agB}`;
         }
 
         function renderCurrentView() {
@@ -1381,7 +1432,8 @@
             } else if (currentTab === 'chances') {
                 buildChancesData();
                 if (chancesSub === 'players') {
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Player Stats (A + B Chances, 5v5 Net Score & Team Shares)";
+                    document.getElementById('chancesABSummaryBar').style.display = 'none';
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Luleå Player Stats (A + B Chances, Chance For inv, 5v5 Net Score & Team Shares)";
                     const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
                     let data = [...workbookData.chancesPlayersAggregated];
                     if (selectedPlayers.length > 0) {
@@ -1389,8 +1441,9 @@
                     }
                     currentFilteredData = data;
                     renderTable();
-                    renderChancesPlayerCharts();
+                    renderChancesPlayerCharts(selectedPlayers.length > 0);
                 } else {
+                    document.getElementById('chancesABSummaryBar').style.display = 'grid';
                     document.getElementById('tableTitle').innerText = "Scoring Chances: Areas & Play Styles (A + B Chances) - Click category row for breakdown";
                     
                     const selectedCategories = Array.from(document.getElementById('filterCategoryMulti').selectedOptions).map(opt => opt.value);
@@ -1442,6 +1495,7 @@
                     });
 
                     currentFilteredData = arr;
+                    updateChancesABSummary(currentFilteredData);
                     renderTable();
                     renderChancesTeamCharts();
                 }
@@ -1754,7 +1808,13 @@
 
             select.removeEventListener('change', filterData);
             select.addEventListener('change', filterData);
-            document.getElementById('playerSearch').addEventListener('input', renderTable);
+            document.getElementById('playerSearch').addEventListener('input', () => {
+                renderTable();
+                if (currentTab === 'chances' && chancesSub === 'players') {
+                    const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
+                    renderChancesPlayerCharts(selectedPlayers.length > 0);
+                }
+            });
             document.getElementById('teamFilter').addEventListener('change', renderCurrentView);
         }
 
@@ -1844,7 +1904,16 @@
                 renderCharts(document.getElementById('gameFilter').value, document.getElementById('teamFilter').value, column);
             } else if (currentTab === 'teams') {
                 renderTeamCharts(column);
+            } else if (currentTab === 'chances' && chancesSub === 'players') {
+                const selectedPlayers = Array.from(document.getElementById('filterPlayersMulti').selectedOptions).map(opt => opt.value);
+                renderChancesPlayerCharts(selectedPlayers.length > 0);
             }
+        }
+
+        function getSearchFilteredRows() {
+            const searchTerm = (document.getElementById('playerSearch').value || '').toLowerCase();
+            if (!searchTerm) return currentFilteredData;
+            return currentFilteredData.filter(row => Object.values(row).join(' ').toLowerCase().includes(searchTerm));
         }
 
         function renderTable() {
@@ -1853,11 +1922,11 @@
                 return;
             }
 
-            const searchTerm = document.getElementById('playerSearch').value.toLowerCase();
-            const filtered = currentFilteredData.filter(row => {
-                const text = Object.values(row).join(' ').toLowerCase();
-                return text.includes(searchTerm);
-            });
+            const filtered = getSearchFilteredRows();
+            if (filtered.length === 0) {
+                document.getElementById('tableBody').innerHTML = `<tr><td colspan="25" class="px-4 py-6 text-center text-slate-400">No matching rows found.</td></tr>`;
+                return;
+            }
 
             const headers = Object.keys(currentFilteredData[0]);
             
@@ -2491,23 +2560,26 @@
             });
         }
 
-        function renderChancesPlayerCharts() {
+        function renderChancesPlayerCharts(hasExplicitPlayerSelection = false) {
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            document.getElementById('chanceChart1Title').innerText = "Luleå Players: 5v5 Net Score (Goals & A+B Chances)";
-            document.getElementById('chanceChart2Title').innerText = "Luleå Players: Goals (Goal For vs Against)";
+            const visibleRows = getSearchFilteredRows();
 
-            const sorted = [...currentFilteredData].sort((a, b) => b['5v5 Net Score'] - a['5v5 Net Score']).slice(0, 10);
-            const labels = sorted.map(d => d['Name']);
+            document.getElementById('chanceChart1Title').innerText = "Luleå Players: 5v5 Net Score (Goals, A+B Chances & Chance inv)";
+
+            let chart1Rows = [...visibleRows].sort((a, b) => b['5v5 Net Score'] - a['5v5 Net Score']);
+            if (!hasExplicitPlayerSelection) {
+                chart1Rows = chart1Rows.slice(0, 10);
+            }
 
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: labels,
+                    labels: chart1Rows.map(d => d['Name']),
                     datasets: [
-                        { label: '5v5 Net Score', data: sorted.map(d => d['5v5 Net Score']), backgroundColor: '#10b981' }
+                        { label: '5v5 Net Score', data: chart1Rows.map(d => d['5v5 Net Score']), backgroundColor: '#10b981' }
                     ]
                 },
                 options: {
@@ -2520,17 +2592,43 @@
                 }
             });
 
-            const sortedGoals = [...currentFilteredData].sort((a, b) => b['Goal For'] - a['Goal For']).slice(0, 10);
-            const labelsGoals = sortedGoals.map(d => d['Name']);
+            // Oikeanpuoleinen kaavio: reaktiivinen suodatukselle ja aktiiviselle lajittelulle
+            const sortKey = currentSortColumn && (currentSortColumn in (visibleRows[0] || {}))
+                ? currentSortColumn
+                : 'Goal For';
+
+            document.getElementById('chanceChart2Title').innerText = hasExplicitPlayerSelection
+                ? `Filtered Players: Goals (Goal For vs Against) · ${sortKey}`
+                : `Players: Goals (Goal For vs Against) · Sorted by ${sortKey}`;
+
+            let chart2Rows = [...visibleRows];
+            if (currentSortColumn && (currentSortColumn in (visibleRows[0] || {}))) {
+                chart2Rows.sort((a, b) => {
+                    let valA = parseFloat(String(a[currentSortColumn] || 0).replace('%', ''));
+                    let valB = parseFloat(String(b[currentSortColumn] || 0).replace('%', ''));
+                    if (!isNaN(valA) && !isNaN(valB)) {
+                        return isAscending ? valA - valB : valB - valA;
+                    }
+                    return isAscending
+                        ? String(a[currentSortColumn] || '').localeCompare(String(b[currentSortColumn] || ''))
+                        : String(b[currentSortColumn] || '').localeCompare(String(a[currentSortColumn] || ''));
+                });
+            } else {
+                chart2Rows.sort((a, b) => (b['Goal For'] - a['Goal For']) || (b['Chance For'] - a['Chance For']));
+            }
+
+            if (!hasExplicitPlayerSelection) {
+                chart2Rows = chart2Rows.slice(0, 10);
+            }
 
             chanceChart2Instance = new Chart(document.getElementById('chanceChart2').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
-                    labels: labelsGoals,
+                    labels: chart2Rows.map(d => d['Name']),
                     datasets: [
-                        { label: 'Goal For', data: sortedGoals.map(d => d['Goal For']), backgroundColor: '#10b981' },
-                        { label: 'Goal Against', data: sortedGoals.map(d => d['Goal Against']), backgroundColor: '#f59e0b' }
+                        { label: 'Goal For', data: chart2Rows.map(d => d['Goal For']), backgroundColor: '#10b981' },
+                        { label: 'Goal Against', data: chart2Rows.map(d => d['Goal Against']), backgroundColor: '#f59e0b' }
                     ]
                 },
                 options: {
