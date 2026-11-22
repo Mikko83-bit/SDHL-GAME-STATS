@@ -300,7 +300,7 @@
                 </div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-lg">
-                <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Goals: For vs Against</h3>
+                <h3 id="chanceChart2Title" class="text-xs font-bold uppercase tracking-wider text-red-400 mb-3">Filtered Metric Result</h3>
                 <div class="relative h-80">
                     <canvas id="chanceChart2"></canvas>
                 </div>
@@ -2592,34 +2592,35 @@
                 }
             });
 
-            // Oikeanpuoleinen kaavio: reaktiivinen suodatukselle ja aktiiviselle lajittelulle
-            const sortKey = currentSortColumn && (currentSortColumn in (visibleRows[0] || {}))
-                ? currentSortColumn
-                : 'Goal For';
+            // 1. VAIN JA AINOASTAAN VALITUN/LAJITELTAVAN SARAKKEEN TULOS
+            let activeCol = currentSortColumn;
+            if (!activeCol || !(activeCol in (visibleRows[0] || {})) || activeCol === 'Name' || activeCol === 'Number') {
+                activeCol = 'Goal For';
+            }
 
-            document.getElementById('chanceChart2Title').innerText = hasExplicitPlayerSelection
-                ? `Filtered Players: Goals (Goal For vs Against) · ${sortKey}`
-                : `Players: Goals (Goal For vs Against) · Sorted by ${sortKey}`;
+            document.getElementById('chanceChart2Title').innerText = `Filtered Metric: ${activeCol}`;
 
             let chart2Rows = [...visibleRows];
-            if (currentSortColumn && (currentSortColumn in (visibleRows[0] || {}))) {
-                chart2Rows.sort((a, b) => {
-                    let valA = parseFloat(String(a[currentSortColumn] || 0).replace('%', ''));
-                    let valB = parseFloat(String(b[currentSortColumn] || 0).replace('%', ''));
-                    if (!isNaN(valA) && !isNaN(valB)) {
-                        return isAscending ? valA - valB : valB - valA;
-                    }
-                    return isAscending
-                        ? String(a[currentSortColumn] || '').localeCompare(String(b[currentSortColumn] || ''))
-                        : String(b[currentSortColumn] || '').localeCompare(String(a[currentSortColumn] || ''));
-                });
-            } else {
-                chart2Rows.sort((a, b) => (b['Goal For'] - a['Goal For']) || (b['Chance For'] - a['Chance For']));
-            }
+            chart2Rows.sort((a, b) => {
+                let valA = parseFloat(String(a[activeCol] || 0).replace('%', ''));
+                let valB = parseFloat(String(b[activeCol] || 0).replace('%', ''));
+                if (!isNaN(valA) && !isNaN(valB)) {
+                    return isAscending ? valA - valB : valB - valA;
+                }
+                return isAscending
+                    ? String(a[activeCol] || '').localeCompare(String(b[activeCol] || ''))
+                    : String(b[activeCol] || '').localeCompare(String(a[activeCol] || ''));
+            });
 
             if (!hasExplicitPlayerSelection) {
                 chart2Rows = chart2Rows.slice(0, 10);
             }
+
+            const isPct = String(activeCol).includes('%');
+            const datasetValues = chart2Rows.map(d => {
+                let val = parseFloat(String(d[activeCol] || 0).replace('%', ''));
+                return isNaN(val) ? 0 : val;
+            });
 
             chanceChart2Instance = new Chart(document.getElementById('chanceChart2').getContext('2d'), {
                 type: 'bar',
@@ -2627,17 +2628,29 @@
                 data: {
                     labels: chart2Rows.map(d => d['Name']),
                     datasets: [
-                        { label: 'Goal For', data: chart2Rows.map(d => d['Goal For']), backgroundColor: '#10b981' },
-                        { label: 'Goal Against', data: chart2Rows.map(d => d['Goal Against']), backgroundColor: '#f59e0b' }
+                        { 
+                            label: activeCol, 
+                            data: datasetValues, 
+                            backgroundColor: '#3b82f6' 
+                        }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: {
                         legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
-                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                        datalabels: { 
+                            anchor: 'end', 
+                            align: 'top', 
+                            color: '#cbd5e1', 
+                            font: { size: 9, weight: 'bold' },
+                            formatter: (v) => isPct ? v + '%' : v
+                        }
                     },
-                    scales: { x: { ticks: { color: '#94a3b8', font: { size: 9, maxRotation: 45, minRotation: 45 } } }, y: { ticks: { color: '#94a3b8' } } }
+                    scales: { 
+                        x: { ticks: { color: '#94a3b8', font: { size: 9, maxRotation: 45, minRotation: 45 } } }, 
+                        y: { ticks: { color: '#94a3b8', callback: (v) => isPct ? v + '%' : v } } 
+                    }
                 }
             });
         }
@@ -2646,27 +2659,49 @@
             if (chanceChart1Instance) chanceChart1Instance.destroy();
             if (chanceChart2Instance) chanceChart2Instance.destroy();
 
-            document.getElementById('chanceChart1Title').innerText = "Areas & Play Styles: Scoring Chances (Chance For A+B vs Against A+B)";
-            document.getElementById('chanceChart2Title').innerText = "Areas & Play Styles: Goals (Goal For vs Against)";
+            document.getElementById('chanceChart1Title').innerText = "Areas & Play Styles: Scoring Chances (A & B Split Stacked)";
+            
+            let activeCol = currentSortColumn;
+            if (!activeCol || !(activeCol in (currentFilteredData[0] || {})) || activeCol === 'Category / Area') {
+                activeCol = 'Chance For';
+            }
+            document.getElementById('chanceChart2Title').innerText = `Areas & Play Styles: Filtered Metric (${activeCol})`;
 
+            // 2. PINOTUT PYLVÄÄT A & B LUVUT SISÄLLÄ (Areas & Play Styles)
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
                 data: {
                     labels: currentFilteredData.map(d => d['Category / Area']),
                     datasets: [
-                        { label: 'Chance For (A+B)', data: currentFilteredData.map(d => d['Chance For']), backgroundColor: '#3b82f6' },
-                        { label: 'Chance Against (A+B)', data: currentFilteredData.map(d => d['Chance Against']), backgroundColor: '#ef4444' }
+                        { label: 'Chance For A', data: currentFilteredData.map(d => d['Chance For A']), backgroundColor: '#1d4ed8', stack: 'For' },
+                        { label: 'Chance For B', data: currentFilteredData.map(d => d['Chance For B']), backgroundColor: '#60a5fa', stack: 'For' },
+                        { label: 'Chance Against A', data: currentFilteredData.map(d => d['Chance Against A']), backgroundColor: '#b91c1c', stack: 'Against' },
+                        { label: 'Chance Against B', data: currentFilteredData.map(d => d['Chance Against B']), backgroundColor: '#f87171', stack: 'Against' }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: {
                         legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
-                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                        datalabels: {
+                            color: '#ffffff',
+                            font: { size: 9, weight: 'bold' },
+                            formatter: (v) => v > 0 ? v : '' // Näytetään luku pylvään sisällä jos > 0
+                        }
                     },
-                    scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } }
+                    scales: {
+                        x: { stacked: true, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                        y: { stacked: true, ticks: { color: '#94a3b8' } }
+                    }
                 }
+            });
+
+            // Oikeanpuoleinen aluekaavio näyttää suodatetun/lajitellun sarakkeen
+            const isPct = String(activeCol).includes('%');
+            const datasetValues = currentFilteredData.map(d => {
+                let val = parseFloat(String(d[activeCol] || 0).replace('%', ''));
+                return isNaN(val) ? 0 : val;
             });
 
             chanceChart2Instance = new Chart(document.getElementById('chanceChart2').getContext('2d'), {
@@ -2675,17 +2710,25 @@
                 data: {
                     labels: currentFilteredData.map(d => d['Category / Area']),
                     datasets: [
-                        { label: 'Goal For', data: currentFilteredData.map(d => d['Goal For']), backgroundColor: '#10b981' },
-                        { label: 'Goal Against', data: currentFilteredData.map(d => d['Goal Against']), backgroundColor: '#f59e0b' }
+                        { label: activeCol, data: datasetValues, backgroundColor: '#10b981' }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: {
                         legend: { labels: { color: '#cbd5e1', font: { size: 10 } } },
-                        datalabels: { anchor: 'end', align: 'top', color: '#cbd5e1', font: { size: 9 } }
+                        datalabels: { 
+                            anchor: 'end', 
+                            align: 'top', 
+                            color: '#cbd5e1', 
+                            font: { size: 9, weight: 'bold' },
+                            formatter: (v) => isPct ? v + '%' : v
+                        }
                     },
-                    scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, y: { ticks: { color: '#94a3b8' } } }
+                    scales: { 
+                        x: { ticks: { color: '#94a3b8', font: { size: 10 } } }, 
+                        y: { ticks: { color: '#94a3b8', callback: (v) => isPct ? v + '%' : v } } 
+                    }
                 }
             });
         }
