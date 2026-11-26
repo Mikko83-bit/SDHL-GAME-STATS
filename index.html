@@ -235,13 +235,13 @@
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
                 <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
                     <div>
-                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game 5v5 Scoring Chances Trend & Averages (A & B Separate)</h2>
-                        <p class="text-xs text-slate-400">5v5 only (OZ, Rush, Turnovers, Takeaways; excl. PP, periods & non-5v5) with separate lines and averages for A & B (For and Against)</p>
+                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game 5v5 Scoring Chances (A & B) + Powerplay Trend & Averages</h2>
+                        <p class="text-xs text-slate-400">5v5 (OZ, Rush, Turnovers, Takeaways, Others; excl. PP, periods & OT) with A & B lines/averages + PP For/Against lines/averages</p>
                     </div>
                     <div id="trendStatsSummary" class="flex flex-wrap gap-3 text-xs font-semibold text-slate-300 bg-slate-950 px-4 py-2 rounded border border-slate-800">
                     </div>
                 </div>
-                <div class="relative h-[460px] w-full">
+                <div class="relative h-[480px] w-full">
                     <canvas id="trendChart"></canvas>
                 </div>
             </div>
@@ -469,7 +469,7 @@
         let trendChartInstance = null;
         let playerRadarInstance = null;
 
-        const categoryOrder = ['OZ', 'Rush', 'Turnovers', 'Takeaways', 'PP', 'Period 1', 'Period 2', 'Period 3', 'OT', 'Others'];
+        const categoryOrder = ['OZ', 'Rush', 'Turnovers', 'Takeaways', 'Others', 'PP', 'Period 1', 'Period 2', 'Period 3', 'OT'];
 
         function normalizeTeamName(name) {
             if (!name) return '-';
@@ -560,33 +560,57 @@
         }
 
         function getChanceForAB(row) {
-            const a = parseNum(row['Chance For A']);
-            const b = parseNum(row['Chance For B']);
-            if (('Chance For A' in row) || ('Chance For B' in row)) {
+            const kA = findKey(row, ['chance for a', 'chancefor a']);
+            const kB = findKey(row, ['chance for b', 'chancefor b']);
+            const a = kA ? parseNum(row[kA]) : 0;
+            const b = kB ? parseNum(row[kB]) : 0;
+            if (kA || kB) {
                 return { a, b, total: a + b };
             }
-            const legacy = parseNum(row['Chance For']);
+            const kLegacy = findKey(row, ['chance for']);
+            const legacy = kLegacy ? parseNum(row[kLegacy]) : 0;
             return { a: 0, b: 0, total: legacy };
         }
 
         function getChanceAgainstAB(row) {
-            const a = parseNum(row['Chance Against A']);
-            const b = parseNum(row['Chance Against B']);
-            if (('Chance Against A' in row) || ('Chance Against B' in row)) {
+            const kA = findKey(row, ['chance against a', 'chanceagainst a']);
+            const kB = findKey(row, ['chance against b', 'chanceagainst b']);
+            const a = kA ? parseNum(row[kA]) : 0;
+            const b = kB ? parseNum(row[kB]) : 0;
+            if (kA || kB) {
                 return { a, b, total: a + b };
             }
-            const legacy = parseNum(row['Chance Against']);
+            const kLegacy = findKey(row, ['chance against']);
+            const legacy = kLegacy ? parseNum(row[kLegacy]) : 0;
             return { a: 0, b: 0, total: legacy };
         }
 
         function getPpChanceForAB(row) {
-            const a = parseNum(row['PP chance A']);
-            const b = parseNum(row['PP chance B']);
-            if (('PP chance A' in row) || ('PP chance B' in row)) {
+            const kA = findKey(row, ['pp chance a', 'ppchance a']);
+            const kB = findKey(row, ['pp chance b', 'ppchance b']);
+            const a = kA ? parseNum(row[kA]) : 0;
+            const b = kB ? parseNum(row[kB]) : 0;
+            if (kA || kB) {
                 return { a, b, total: a + b };
             }
-            const legacy = parseNum(row['PP chance']);
+            const kLegacy = findKey(row, ['pp chance']);
+            const legacy = kLegacy ? parseNum(row[kLegacy]) : 0;
             return { a: 0, b: 0, total: legacy };
+        }
+
+        function getPpForTotal(row) {
+            const kGoal = findKey(row, ['pp goal', 'pp goals', 'pp_goal']);
+            const goal = kGoal ? parseNum(row[kGoal]) : 0;
+            const ppAB = getPpChanceForAB(row);
+            return goal + ppAB.total;
+        }
+
+        function getPpAgainstTotal(row) {
+            const kGoalAg = findKey(row, ['pp goal ag', 'pp goals ag', 'pp goal against', 'pp_goal_ag']);
+            const kChanceAg = findKey(row, ['pp chance ag', 'pp chances ag', 'pp chance against', 'pp_chance_ag']);
+            const goalAg = kGoalAg ? parseNum(row[kGoalAg]) : 0;
+            const chanceAg = kChanceAg ? parseNum(row[kChanceAg]) : 0;
+            return goalAg + chanceAg;
         }
 
         function getZoneFaceoffStats(row) {
@@ -765,7 +789,7 @@
             const metricRows = [
                 { label: 'Goals', valA: a.goals, valB: b.goals, fmtA: a.goals, fmtB: b.goals },
                 { label: 'Expected Goals (xG)', valA: a.xg, valB: b.xg, fmtA: a.xg.toFixed(2), fmtB: b.xg.toFixed(2) },
-                { label: 'Shots on Goal (SOG)', valA: a.sog, valB: b.sog, fmtA: a.sog, fmtB: a.sog },
+                { label: 'Shots on Goal (SOG)', valA: a.sog, valB: b.sog, fmtA: a.sog, fmtB: b.sog },
                 { label: 'Corsi For %', valA: parseFloat(a.corsiPct), valB: parseFloat(b.corsiPct), fmtA: `${a.corsiPct}%`, fmtB: `${b.corsiPct}%` },
                 { label: 'Faceoffs Won %', valA: parseFloat(a.foPct), valB: parseFloat(b.foPct), fmtA: `${a.foPct}% (${a.foWon}/${a.foTotal})`, fmtB: `${b.foPct}% (${b.foWon}/${b.foTotal})` },
                 { label: 'Blocked Shots', valA: a.blocked, valB: b.blocked, fmtA: a.blocked, fmtB: b.blocked }
@@ -885,27 +909,22 @@
             return ordered;
         }
 
+        function isPpRow(row) {
+            const cat = getDescriptorCategory(row['Descriptor']);
+            if (cat === 'PP') return true;
+            return getPpForTotal(row) > 0 || getPpAgainstTotal(row) > 0;
+        }
+
         function is5v5Descriptor(desc) {
-            if (!desc) return false;
+            if (!desc) return true;
             const d = String(desc).trim();
             const upper = d.toUpperCase();
             const lower = d.toLowerCase();
 
             if (upper.startsWith('PP') || upper.includes('PP ') || lower.includes('powerplay') || lower.includes('power play')) return false;
-            if (lower === 'empty net' || lower === 'pk' || lower === 'faceoff' || upper.startsWith('PK')) return false;
-            if (upper.includes('PERIOD') || upper.includes('OT') || upper.includes('OVERTIME')) return false;
+            if (upper.includes('PERIOD 1') || upper.includes('PERIOD 2') || upper.includes('PERIOD 3') || upper.includes('OT') || upper.includes('OVERTIME')) return false;
 
-            const ozList = [
-                'OZ 1 area', 'OZ 2 area', 'OZ reb', 'Oz reb',
-                'OZ crash the net', 'OZ rr pass', 'OZ tip',
-                'OZ shot+screen', 'OZ blueline+screen'
-            ];
-            if (ozList.some(item => item.toLowerCase() === lower)) return true;
-            if (upper.includes('RUSH')) return true;
-            if (lower.includes('turnover') || lower.includes('t over')) return true;
-            if (upper.startsWith('TA') || upper.includes('TA ')) return true;
-
-            return false;
+            return true;
         }
 
         function getDescriptorCategory(desc) {
@@ -914,7 +933,7 @@
             const upper = d.toUpperCase();
             const lower = d.toLowerCase();
 
-            if (upper.startsWith('PP') || upper.includes('PP ')) return 'PP';
+            if (upper.startsWith('PP') || upper.includes('PP ') || lower.includes('powerplay') || lower.includes('power play')) return 'PP';
 
             const ozList = [
                 'OZ 1 area', 'OZ 2 area', 'OZ reb', 'Oz reb', 
@@ -931,8 +950,6 @@
             if (upper.includes('PERIOD 2')) return 'Period 2';
             if (upper.includes('PERIOD 3')) return 'Period 3';
             if (upper.includes('OT') || upper.includes('OVERTIME')) return 'OT';
-
-            if (lower === 'empty net' || lower === 'pk' || lower === 'faceoff') return 'Others';
 
             return 'Others';
         }
@@ -1631,8 +1648,6 @@
             const gameMap = {};
 
             workbookData.chancesTeamRaw.forEach(row => {
-                if (!is5v5Descriptor(row['Descriptor'])) return;
-
                 const gk = getGameLabelKey(row);
                 if (!gk || gk === '___' || gk === 'undefined' || gk === '0') return;
 
@@ -1642,17 +1657,23 @@
                         forA: 0,
                         forB: 0,
                         againstA: 0,
-                        againstB: 0
+                        againstB: 0,
+                        ppFor: 0,
+                        ppAgainst: 0
                     };
                 }
 
-                const cfAB = getChanceForAB(row);
-                const caAB = getChanceAgainstAB(row);
+                if (is5v5Descriptor(row['Descriptor'])) {
+                    const cfAB = getChanceForAB(row);
+                    const caAB = getChanceAgainstAB(row);
+                    gameMap[gk].forA += cfAB.a;
+                    gameMap[gk].forB += cfAB.b;
+                    gameMap[gk].againstA += caAB.a;
+                    gameMap[gk].againstB += caAB.b;
+                }
 
-                gameMap[gk].forA += cfAB.a;
-                gameMap[gk].forB += cfAB.b;
-                gameMap[gk].againstA += caAB.a;
-                gameMap[gk].againstB += caAB.b;
+                gameMap[gk].ppFor += getPpForTotal(row);
+                gameMap[gk].ppAgainst += getPpAgainstTotal(row);
             });
 
             const gamesArr = Object.values(gameMap).sort((a, b) => {
@@ -1675,19 +1696,25 @@
             const dataForB = gamesArr.map(item => item.forB);
             const dataAgainstA = gamesArr.map(item => item.againstA);
             const dataAgainstB = gamesArr.map(item => item.againstB);
+            const dataPpFor = gamesArr.map(item => item.ppFor);
+            const dataPpAgainst = gamesArr.map(item => item.ppAgainst);
 
             const n = gamesArr.length;
             const avgForA = n > 0 ? Number((dataForA.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
             const avgForB = n > 0 ? Number((dataForB.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
             const avgAgainstA = n > 0 ? Number((dataAgainstA.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
             const avgAgainstB = n > 0 ? Number((dataAgainstB.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
+            const avgPpFor = n > 0 ? Number((dataPpFor.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
+            const avgPpAgainst = n > 0 ? Number((dataPpAgainst.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
 
             document.getElementById('trendStatsSummary').innerHTML = `
-                <span>5v5 Games: <strong class="text-white">${n}</strong></span>
-                <span>Avg For A: <strong class="text-blue-400">${avgForA.toFixed(1)}</strong></span>
-                <span>Avg For B: <strong class="text-sky-300">${avgForB.toFixed(1)}</strong></span>
-                <span>Avg Against A: <strong class="text-rose-400">${avgAgainstA.toFixed(1)}</strong></span>
-                <span>Avg Against B: <strong class="text-amber-400">${avgAgainstB.toFixed(1)}</strong></span>
+                <span>Games: <strong class="text-white">${n}</strong></span>
+                <span>Avg 5v5 For A: <strong class="text-blue-400">${avgForA.toFixed(1)}</strong></span>
+                <span>Avg 5v5 For B: <strong class="text-sky-300">${avgForB.toFixed(1)}</strong></span>
+                <span>Avg 5v5 Against A: <strong class="text-rose-400">${avgAgainstA.toFixed(1)}</strong></span>
+                <span>Avg 5v5 Against B: <strong class="text-amber-400">${avgAgainstB.toFixed(1)}</strong></span>
+                <span>Avg PP For: <strong class="text-emerald-400">${avgPpFor.toFixed(1)}</strong></span>
+                <span>Avg PP Against: <strong class="text-purple-400">${avgPpAgainst.toFixed(1)}</strong></span>
             `;
 
             trendChartInstance = new Chart(document.getElementById('trendChart').getContext('2d'), {
@@ -1695,14 +1722,18 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'For A (5v5)', data: dataForA, borderColor: '#2563eb', backgroundColor: '#2563eb', borderWidth: 2.2, tension: 0.1 },
-                        { label: 'For B (5v5)', data: dataForB, borderColor: '#7dd3fc', backgroundColor: '#7dd3fc', borderWidth: 2.2, tension: 0.1 },
-                        { label: 'Against A (5v5)', data: dataAgainstA, borderColor: '#e11d48', backgroundColor: '#e11d48', borderWidth: 2.2, tension: 0.1 },
-                        { label: 'Against B (5v5)', data: dataAgainstB, borderColor: '#fbbf24', backgroundColor: '#fbbf24', borderWidth: 2.2, tension: 0.1 },
-                        { label: 'Avg For A', data: gamesArr.map(() => avgForA), borderColor: '#2563eb', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
-                        { label: 'Avg For B', data: gamesArr.map(() => avgForB), borderColor: '#7dd3fc', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
-                        { label: 'Avg Against A', data: gamesArr.map(() => avgAgainstA), borderColor: '#e11d48', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
-                        { label: 'Avg Against B', data: gamesArr.map(() => avgAgainstB), borderColor: '#fbbf24', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
+                        { label: '5v5 For A', data: dataForA, borderColor: '#2563eb', backgroundColor: '#2563eb', borderWidth: 2.2, tension: 0.1 },
+                        { label: '5v5 For B', data: dataForB, borderColor: '#7dd3fc', backgroundColor: '#7dd3fc', borderWidth: 2.2, tension: 0.1 },
+                        { label: '5v5 Against A', data: dataAgainstA, borderColor: '#e11d48', backgroundColor: '#e11d48', borderWidth: 2.2, tension: 0.1 },
+                        { label: '5v5 Against B', data: dataAgainstB, borderColor: '#fbbf24', backgroundColor: '#fbbf24', borderWidth: 2.2, tension: 0.1 },
+                        { label: 'PP For (Goal + A + B)', data: dataPpFor, borderColor: '#10b981', backgroundColor: '#10b981', borderWidth: 2.4, tension: 0.1 },
+                        { label: 'PP Against (Goal + Chance)', data: dataPpAgainst, borderColor: '#a855f7', backgroundColor: '#a855f7', borderWidth: 2.4, tension: 0.1 },
+                        { label: 'Avg 5v5 For A', data: gamesArr.map(() => avgForA), borderColor: '#2563eb', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: 'Avg 5v5 For B', data: gamesArr.map(() => avgForB), borderColor: '#7dd3fc', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: 'Avg 5v5 Against A', data: gamesArr.map(() => avgAgainstA), borderColor: '#e11d48', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: 'Avg 5v5 Against B', data: gamesArr.map(() => avgAgainstB), borderColor: '#fbbf24', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: 'Avg PP For', data: gamesArr.map(() => avgPpFor), borderColor: '#10b981', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: 'Avg PP Against', data: gamesArr.map(() => avgPpAgainst), borderColor: '#a855f7', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
                     ]
                 },
                 options: {
