@@ -235,13 +235,13 @@
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
                 <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
                     <div>
-                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game Scoring Chances Trend & Averages (OZ, Rush, Turnovers, Takeaways)</h2>
-                        <p class="text-xs text-slate-400">Total For (A+B) vs Total Against (A+B) across played games with average lines (excluding period totals to avoid double counting)</p>
+                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game 5v5 Scoring Chances Trend & Averages (A & B Separate)</h2>
+                        <p class="text-xs text-slate-400">5v5 only (OZ, Rush, Turnovers, Takeaways; excl. PP, periods & non-5v5) with separate lines and averages for A & B (For and Against)</p>
                     </div>
-                    <div id="trendStatsSummary" class="flex gap-4 text-xs font-semibold text-slate-300 bg-slate-950 px-4 py-2 rounded border border-slate-800">
+                    <div id="trendStatsSummary" class="flex flex-wrap gap-3 text-xs font-semibold text-slate-300 bg-slate-950 px-4 py-2 rounded border border-slate-800">
                     </div>
                 </div>
-                <div class="relative h-[450px] w-full">
+                <div class="relative h-[460px] w-full">
                     <canvas id="trendChart"></canvas>
                 </div>
             </div>
@@ -765,7 +765,7 @@
             const metricRows = [
                 { label: 'Goals', valA: a.goals, valB: b.goals, fmtA: a.goals, fmtB: b.goals },
                 { label: 'Expected Goals (xG)', valA: a.xg, valB: b.xg, fmtA: a.xg.toFixed(2), fmtB: b.xg.toFixed(2) },
-                { label: 'Shots on Goal (SOG)', valA: a.sog, valB: b.sog, fmtA: a.sog, fmtB: b.sog },
+                { label: 'Shots on Goal (SOG)', valA: a.sog, valB: b.sog, fmtA: a.sog, fmtB: a.sog },
                 { label: 'Corsi For %', valA: parseFloat(a.corsiPct), valB: parseFloat(b.corsiPct), fmtA: `${a.corsiPct}%`, fmtB: `${b.corsiPct}%` },
                 { label: 'Faceoffs Won %', valA: parseFloat(a.foPct), valB: parseFloat(b.foPct), fmtA: `${a.foPct}% (${a.foWon}/${a.foTotal})`, fmtB: `${b.foPct}% (${b.foWon}/${b.foTotal})` },
                 { label: 'Blocked Shots', valA: a.blocked, valB: b.blocked, fmtA: a.blocked, fmtB: b.blocked }
@@ -883,6 +883,29 @@
             });
 
             return ordered;
+        }
+
+        function is5v5Descriptor(desc) {
+            if (!desc) return false;
+            const d = String(desc).trim();
+            const upper = d.toUpperCase();
+            const lower = d.toLowerCase();
+
+            if (upper.startsWith('PP') || upper.includes('PP ') || lower.includes('powerplay') || lower.includes('power play')) return false;
+            if (lower === 'empty net' || lower === 'pk' || lower === 'faceoff' || upper.startsWith('PK')) return false;
+            if (upper.includes('PERIOD') || upper.includes('OT') || upper.includes('OVERTIME')) return false;
+
+            const ozList = [
+                'OZ 1 area', 'OZ 2 area', 'OZ reb', 'Oz reb',
+                'OZ crash the net', 'OZ rr pass', 'OZ tip',
+                'OZ shot+screen', 'OZ blueline+screen'
+            ];
+            if (ozList.some(item => item.toLowerCase() === lower)) return true;
+            if (upper.includes('RUSH')) return true;
+            if (lower.includes('turnover') || lower.includes('t over')) return true;
+            if (upper.startsWith('TA') || upper.includes('TA ')) return true;
+
+            return false;
         }
 
         function getDescriptorCategory(desc) {
@@ -1254,8 +1277,7 @@
 
             workbookData.chancesTeamRaw.forEach(row => {
                 if (selectedGames.length > 0 && !selectedGames.includes(getGameLabelKey(row))) return;
-                const cat = getDescriptorCategory(row['Descriptor']);
-                if (isPeriodCategory(cat)) return;
+                if (!is5v5Descriptor(row['Descriptor'])) return;
 
                 const cfAB = getChanceForAB(row);
                 teamTotalChancesFor += parseNum(row['Goal For']) + cfAB.total;
@@ -1606,30 +1628,31 @@
                 }
             });
 
-            const validCats = ['OZ', 'Rush', 'Turnovers', 'Takeaways'];
             const gameMap = {};
 
             workbookData.chancesTeamRaw.forEach(row => {
-                const descCat = getDescriptorCategory(row['Descriptor']);
-                if (!validCats.includes(descCat) || isPeriodCategory(descCat)) return;
+                if (!is5v5Descriptor(row['Descriptor'])) return;
 
                 const gk = getGameLabelKey(row);
                 if (!gk || gk === '___' || gk === 'undefined' || gk === '0') return;
 
                 if (!gameMap[gk]) {
-                    gameMap[gk] = { key: gk, totalFor: 0, totalAgainst: 0 };
+                    gameMap[gk] = {
+                        key: gk,
+                        forA: 0,
+                        forB: 0,
+                        againstA: 0,
+                        againstB: 0
+                    };
                 }
 
                 const cfAB = getChanceForAB(row);
                 const caAB = getChanceAgainstAB(row);
 
-                const gf = parseNum(row['Goal For']);
-                const cf = cfAB.total;
-                const ga = parseNum(row['Goal Against']);
-                const ca = caAB.total;
-
-                gameMap[gk].totalFor += (gf + cf);
-                gameMap[gk].totalAgainst += (ga + ca);
+                gameMap[gk].forA += cfAB.a;
+                gameMap[gk].forB += cfAB.b;
+                gameMap[gk].againstA += caAB.a;
+                gameMap[gk].againstB += caAB.b;
             });
 
             const gamesArr = Object.values(gameMap).sort((a, b) => {
@@ -1647,40 +1670,49 @@
                 if (info && info.opponent && info.date) return `${info.date} (${info.opponent})`;
                 return item.key;
             });
-            const dataFor = gamesArr.map(item => item.totalFor);
-            const dataAgainst = gamesArr.map(item => item.totalAgainst);
 
-            const avgFor = dataFor.length > 0 ? (dataFor.reduce((a, b) => a + b, 0) / dataFor.length).toFixed(1) : 0;
-            const avgAgainst = dataAgainst.length > 0 ? (dataAgainst.reduce((a, b) => a + b, 0) / dataAgainst.length).toFixed(1) : 0;
+            const dataForA = gamesArr.map(item => item.forA);
+            const dataForB = gamesArr.map(item => item.forB);
+            const dataAgainstA = gamesArr.map(item => item.againstA);
+            const dataAgainstB = gamesArr.map(item => item.againstB);
+
+            const n = gamesArr.length;
+            const avgForA = n > 0 ? Number((dataForA.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
+            const avgForB = n > 0 ? Number((dataForB.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
+            const avgAgainstA = n > 0 ? Number((dataAgainstA.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
+            const avgAgainstB = n > 0 ? Number((dataAgainstB.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
 
             document.getElementById('trendStatsSummary').innerHTML = `
-                <span>Total Games: <strong class="text-white">${gamesArr.length}</strong></span>
-                <span>Avg For (Team): <strong class="text-blue-400">${avgFor}</strong></span>
-                <span>Avg Against (Team): <strong class="text-rose-400">${avgAgainst}</strong></span>
+                <span>5v5 Games: <strong class="text-white">${n}</strong></span>
+                <span>Avg For A: <strong class="text-blue-400">${avgForA.toFixed(1)}</strong></span>
+                <span>Avg For B: <strong class="text-sky-300">${avgForB.toFixed(1)}</strong></span>
+                <span>Avg Against A: <strong class="text-rose-400">${avgAgainstA.toFixed(1)}</strong></span>
+                <span>Avg Against B: <strong class="text-amber-400">${avgAgainstB.toFixed(1)}</strong></span>
             `;
-
-            const avgForArr = gamesArr.map(() => Number(avgFor));
-            const avgAgainstArr = gamesArr.map(() => Number(avgAgainst));
 
             trendChartInstance = new Chart(document.getElementById('trendChart').getContext('2d'), {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Total For (OZ, Rush, TO, TA)', data: dataFor, borderColor: '#3b82f6', backgroundColor: '#3b82f6', borderWidth: 2, tension: 0.1 },
-                        { label: 'Total Against', data: dataAgainst, borderColor: '#ef4444', backgroundColor: '#ef4444', borderWidth: 2, tension: 0.1 },
-                        { label: 'Avg For', data: avgForArr, borderColor: '#3b82f6', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
-                        { label: 'Avg Against', data: avgAgainstArr, borderColor: '#ef4444', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
+                        { label: 'For A (5v5)', data: dataForA, borderColor: '#2563eb', backgroundColor: '#2563eb', borderWidth: 2.2, tension: 0.1 },
+                        { label: 'For B (5v5)', data: dataForB, borderColor: '#7dd3fc', backgroundColor: '#7dd3fc', borderWidth: 2.2, tension: 0.1 },
+                        { label: 'Against A (5v5)', data: dataAgainstA, borderColor: '#e11d48', backgroundColor: '#e11d48', borderWidth: 2.2, tension: 0.1 },
+                        { label: 'Against B (5v5)', data: dataAgainstB, borderColor: '#fbbf24', backgroundColor: '#fbbf24', borderWidth: 2.2, tension: 0.1 },
+                        { label: 'Avg For A', data: gamesArr.map(() => avgForA), borderColor: '#2563eb', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: 'Avg For B', data: gamesArr.map(() => avgForB), borderColor: '#7dd3fc', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: 'Avg Against A', data: gamesArr.map(() => avgAgainstA), borderColor: '#e11d48', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { label: 'Avg Against B', data: gamesArr.map(() => avgAgainstB), borderColor: '#fbbf24', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     plugins: {
-                        legend: { labels: { color: '#cbd5e1', font: { size: 11 } } }
+                        legend: { labels: { color: '#cbd5e1', font: { size: 10 }, boxWidth: 18 } }
                     },
                     scales: {
                         x: { ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 45, minRotation: 45 } },
-                        y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } }
+                        y: { beginAtZero: true, ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } }
                     }
                 }
             });
@@ -2592,7 +2624,6 @@
                 }
             });
 
-            // 1. VAIN JA AINOASTAAN VALITUN/LAJITELTAVAN SARAKKEEN TULOS
             let activeCol = currentSortColumn;
             if (!activeCol || !(activeCol in (visibleRows[0] || {})) || activeCol === 'Name' || activeCol === 'Number') {
                 activeCol = 'Goal For';
@@ -2667,7 +2698,6 @@
             }
             document.getElementById('chanceChart2Title').innerText = `Areas & Play Styles: Filtered Metric (${activeCol})`;
 
-            // 2. PINOTUT PYLVÄÄT A & B LUVUT SISÄLLÄ (Areas & Play Styles)
             chanceChart1Instance = new Chart(document.getElementById('chanceChart1').getContext('2d'), {
                 type: 'bar',
                 plugins: [ChartDataLabels],
@@ -2687,7 +2717,7 @@
                         datalabels: {
                             color: '#ffffff',
                             font: { size: 9, weight: 'bold' },
-                            formatter: (v) => v > 0 ? v : '' // Näytetään luku pylvään sisällä jos > 0
+                            formatter: (v) => v > 0 ? v : ''
                         }
                     },
                     scales: {
@@ -2697,7 +2727,6 @@
                 }
             });
 
-            // Oikeanpuoleinen aluekaavio näyttää suodatetun/lajitellun sarakkeen
             const isPct = String(activeCol).includes('%');
             const datasetValues = currentFilteredData.map(d => {
                 let val = parseFloat(String(d[activeCol] || 0).replace('%', ''));
