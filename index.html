@@ -230,13 +230,13 @@
             </div>
         </div>
 
-        <!-- Trends Section -->
+        <!-- Trends Section (5v5 Only) -->
         <div id="trendsSection" class="space-y-6" style="display: none;">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-6 shadow-xl">
                 <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
                     <div>
-                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game 5v5 Scoring Chances (A & B) + Powerplay Trend & Averages</h2>
-                        <p class="text-xs text-slate-400">5v5 (OZ, Rush, Turnovers, Takeaways, Others; excl. PP, periods & OT) with A & B lines/averages + PP For/Against lines/averages</p>
+                        <h2 class="text-sm font-bold uppercase tracking-wide text-red-400">Game-by-Game 5v5 Scoring Chances (A & B) & Averages</h2>
+                        <p class="text-xs text-slate-400">5v5 only (OZ, Rush, Turnovers, Takeaways, Others; excl. PP, periods & OT) with A & B trend lines and averages</p>
                     </div>
                     <div id="trendStatsSummary" class="flex flex-wrap gap-3 text-xs font-semibold text-slate-300 bg-slate-950 px-4 py-2 rounded border border-slate-800">
                     </div>
@@ -598,19 +598,66 @@
             return { a: 0, b: 0, total: legacy };
         }
 
-        function getPpForTotal(row) {
+        function getPpGoalFor(row) {
             const kGoal = findKey(row, ['pp goal', 'pp goals', 'pp_goal']);
-            const goal = kGoal ? parseNum(row[kGoal]) : 0;
+            return kGoal ? parseNum(row[kGoal]) : 0;
+        }
+
+        function getPpForTotal(row) {
+            const goal = getPpGoalFor(row);
             const ppAB = getPpChanceForAB(row);
             return goal + ppAB.total;
         }
 
-        function getPpAgainstTotal(row) {
+        function getPpGoalAgainst(row) {
             const kGoalAg = findKey(row, ['pp goal ag', 'pp goals ag', 'pp goal against', 'pp_goal_ag']);
+            return kGoalAg ? parseNum(row[kGoalAg]) : 0;
+        }
+
+        function getPpChanceAgainst(row) {
             const kChanceAg = findKey(row, ['pp chance ag', 'pp chances ag', 'pp chance against', 'pp_chance_ag']);
-            const goalAg = kGoalAg ? parseNum(row[kGoalAg]) : 0;
-            const chanceAg = kChanceAg ? parseNum(row[kChanceAg]) : 0;
-            return goalAg + chanceAg;
+            return kChanceAg ? parseNum(row[kChanceAg]) : 0;
+        }
+
+        function getPpAgainstTotal(row) {
+            return getPpGoalAgainst(row) + getPpChanceAgainst(row);
+        }
+
+        // Muuntaa rivin arvon kategoria-aggregointiin:
+        // PP-rivillä ylivoima- ja alivoimaluvut tulevat PP-sarakkeista.
+        function extractCategoryRowStats(row, cat) {
+            if (cat === 'PP') {
+                const ppGoalFor = getPpGoalFor(row);
+                const ppAB = getPpChanceForAB(row);
+                const ppGoalAg = getPpGoalAgainst(row);
+                const ppChanceAg = getPpChanceAgainst(row);
+                const ppFor = ppGoalFor + ppAB.total;
+                const ppAgainst = ppGoalAg + ppChanceAg;
+
+                return {
+                    goalFor: ppGoalFor,
+                    chanceForA: ppAB.a,
+                    chanceForB: ppAB.b,
+                    chanceFor: ppFor,
+                    goalAgainst: ppGoalAg,
+                    chanceAgainstA: ppChanceAg,
+                    chanceAgainstB: 0,
+                    chanceAgainst: ppAgainst
+                };
+            }
+
+            const cfAB = getChanceForAB(row);
+            const caAB = getChanceAgainstAB(row);
+            return {
+                goalFor: parseNum(row['Goal For']),
+                chanceForA: cfAB.a,
+                chanceForB: cfAB.b,
+                chanceFor: cfAB.total,
+                goalAgainst: parseNum(row['Goal Against']),
+                chanceAgainstA: caAB.a,
+                chanceAgainstB: caAB.b,
+                chanceAgainst: caAB.total
+            };
         }
 
         function getZoneFaceoffStats(row) {
@@ -907,12 +954,6 @@
             });
 
             return ordered;
-        }
-
-        function isPpRow(row) {
-            const cat = getDescriptorCategory(row['Descriptor']);
-            if (cat === 'PP') return true;
-            return getPpForTotal(row) > 0 || getPpAgainstTotal(row) > 0;
         }
 
         function is5v5Descriptor(desc) {
@@ -1483,7 +1524,7 @@
                     renderChancesPlayerCharts(selectedPlayers.length > 0);
                 } else {
                     document.getElementById('chancesABSummaryBar').style.display = 'grid';
-                    document.getElementById('tableTitle').innerText = "Scoring Chances: Areas & Play Styles (A + B Chances) - Click category row for breakdown";
+                    document.getElementById('tableTitle').innerText = "Scoring Chances: Areas & Play Styles (A + B Chances, PP For/Against) - Click category row for breakdown";
                     
                     const selectedCategories = Array.from(document.getElementById('filterCategoryMulti').selectedOptions).map(opt => opt.value);
                     const selectedGames = Array.from(document.getElementById('filterChancesGamesMulti').selectedOptions).map(opt => opt.value);
@@ -1498,8 +1539,7 @@
                     const catMap = {};
                     teamRaw.forEach(row => {
                         const cat = getDescriptorCategory(row['Descriptor']);
-                        const cfAB = getChanceForAB(row);
-                        const caAB = getChanceAgainstAB(row);
+                        const stats = extractCategoryRowStats(row, cat);
 
                         if (!catMap[cat]) {
                             catMap[cat] = {
@@ -1514,14 +1554,14 @@
                                 'Chance Against': 0
                             };
                         }
-                        catMap[cat]['Goal For'] += parseNum(row['Goal For']);
-                        catMap[cat]['Chance For A'] += cfAB.a;
-                        catMap[cat]['Chance For B'] += cfAB.b;
-                        catMap[cat]['Chance For'] += cfAB.total;
-                        catMap[cat]['Goal Against'] += parseNum(row['Goal Against']);
-                        catMap[cat]['Chance Against A'] += caAB.a;
-                        catMap[cat]['Chance Against B'] += caAB.b;
-                        catMap[cat]['Chance Against'] += caAB.total;
+                        catMap[cat]['Goal For'] += stats.goalFor;
+                        catMap[cat]['Chance For A'] += stats.chanceForA;
+                        catMap[cat]['Chance For B'] += stats.chanceForB;
+                        catMap[cat]['Chance For'] += stats.chanceFor;
+                        catMap[cat]['Goal Against'] += stats.goalAgainst;
+                        catMap[cat]['Chance Against A'] += stats.chanceAgainstA;
+                        catMap[cat]['Chance Against B'] += stats.chanceAgainstB;
+                        catMap[cat]['Chance Against'] += stats.chanceAgainst;
                     });
 
                     let arr = Object.values(catMap);
@@ -1628,6 +1668,7 @@
             renderLeaderList('ozLeadersList', ozLeaders, 'oz');
         }
 
+        // Trends & Averages: ainoastaan 5v5 (sisältäen Others, ilman PP, erät ja OT)
         function renderTrendsView() {
             if (trendChartInstance) trendChartInstance.destroy();
 
@@ -1650,6 +1691,10 @@
             workbookData.chancesTeamRaw.forEach(row => {
                 const gk = getGameLabelKey(row);
                 if (!gk || gk === '___' || gk === 'undefined' || gk === '0') return;
+                if (!is5v5Descriptor(row['Descriptor'])) return;
+
+                const cfAB = getChanceForAB(row);
+                const caAB = getChanceAgainstAB(row);
 
                 if (!gameMap[gk]) {
                     gameMap[gk] = {
@@ -1657,23 +1702,13 @@
                         forA: 0,
                         forB: 0,
                         againstA: 0,
-                        againstB: 0,
-                        ppFor: 0,
-                        ppAgainst: 0
+                        againstB: 0
                     };
                 }
-
-                if (is5v5Descriptor(row['Descriptor'])) {
-                    const cfAB = getChanceForAB(row);
-                    const caAB = getChanceAgainstAB(row);
-                    gameMap[gk].forA += cfAB.a;
-                    gameMap[gk].forB += cfAB.b;
-                    gameMap[gk].againstA += caAB.a;
-                    gameMap[gk].againstB += caAB.b;
-                }
-
-                gameMap[gk].ppFor += getPpForTotal(row);
-                gameMap[gk].ppAgainst += getPpAgainstTotal(row);
+                gameMap[gk].forA += cfAB.a;
+                gameMap[gk].forB += cfAB.b;
+                gameMap[gk].againstA += caAB.a;
+                gameMap[gk].againstB += caAB.b;
             });
 
             const gamesArr = Object.values(gameMap).sort((a, b) => {
@@ -1696,16 +1731,12 @@
             const dataForB = gamesArr.map(item => item.forB);
             const dataAgainstA = gamesArr.map(item => item.againstA);
             const dataAgainstB = gamesArr.map(item => item.againstB);
-            const dataPpFor = gamesArr.map(item => item.ppFor);
-            const dataPpAgainst = gamesArr.map(item => item.ppAgainst);
 
             const n = gamesArr.length;
             const avgForA = n > 0 ? Number((dataForA.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
             const avgForB = n > 0 ? Number((dataForB.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
             const avgAgainstA = n > 0 ? Number((dataAgainstA.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
             const avgAgainstB = n > 0 ? Number((dataAgainstB.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
-            const avgPpFor = n > 0 ? Number((dataPpFor.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
-            const avgPpAgainst = n > 0 ? Number((dataPpAgainst.reduce((a, b) => a + b, 0) / n).toFixed(1)) : 0;
 
             document.getElementById('trendStatsSummary').innerHTML = `
                 <span>Games: <strong class="text-white">${n}</strong></span>
@@ -1713,8 +1744,6 @@
                 <span>Avg 5v5 For B: <strong class="text-sky-300">${avgForB.toFixed(1)}</strong></span>
                 <span>Avg 5v5 Against A: <strong class="text-rose-400">${avgAgainstA.toFixed(1)}</strong></span>
                 <span>Avg 5v5 Against B: <strong class="text-amber-400">${avgAgainstB.toFixed(1)}</strong></span>
-                <span>Avg PP For: <strong class="text-emerald-400">${avgPpFor.toFixed(1)}</strong></span>
-                <span>Avg PP Against: <strong class="text-purple-400">${avgPpAgainst.toFixed(1)}</strong></span>
             `;
 
             trendChartInstance = new Chart(document.getElementById('trendChart').getContext('2d'), {
@@ -1726,14 +1755,10 @@
                         { label: '5v5 For B', data: dataForB, borderColor: '#7dd3fc', backgroundColor: '#7dd3fc', borderWidth: 2.2, tension: 0.1 },
                         { label: '5v5 Against A', data: dataAgainstA, borderColor: '#e11d48', backgroundColor: '#e11d48', borderWidth: 2.2, tension: 0.1 },
                         { label: '5v5 Against B', data: dataAgainstB, borderColor: '#fbbf24', backgroundColor: '#fbbf24', borderWidth: 2.2, tension: 0.1 },
-                        { label: 'PP For (Goal + A + B)', data: dataPpFor, borderColor: '#10b981', backgroundColor: '#10b981', borderWidth: 2.4, tension: 0.1 },
-                        { label: 'PP Against (Goal + Chance)', data: dataPpAgainst, borderColor: '#a855f7', backgroundColor: '#a855f7', borderWidth: 2.4, tension: 0.1 },
                         { label: 'Avg 5v5 For A', data: gamesArr.map(() => avgForA), borderColor: '#2563eb', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
                         { label: 'Avg 5v5 For B', data: gamesArr.map(() => avgForB), borderColor: '#7dd3fc', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
                         { label: 'Avg 5v5 Against A', data: gamesArr.map(() => avgAgainstA), borderColor: '#e11d48', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
-                        { label: 'Avg 5v5 Against B', data: gamesArr.map(() => avgAgainstB), borderColor: '#fbbf24', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
-                        { label: 'Avg PP For', data: gamesArr.map(() => avgPpFor), borderColor: '#10b981', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false },
-                        { label: 'Avg PP Against', data: gamesArr.map(() => avgPpAgainst), borderColor: '#a855f7', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
+                        { label: 'Avg 5v5 Against B', data: gamesArr.map(() => avgAgainstB), borderColor: '#fbbf24', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, fill: false }
                     ]
                 },
                 options: {
@@ -2268,7 +2293,7 @@
 
         function openCategoryModal(categoryName) {
             document.getElementById('modalPlayerName').innerText = `Category Breakdown: ${categoryName}`;
-            document.getElementById('modalSubtitle').innerText = "Detailed sub-descriptors breakdown (A + B Chances)";
+            document.getElementById('modalSubtitle').innerText = "Detailed sub-descriptors breakdown (A + B Chances, PP For/Against)";
 
             document.getElementById('modalSummaryContainer').style.display = 'none';
             document.getElementById('modalRadarContainer').style.display = 'none';
@@ -2285,8 +2310,7 @@
             const descMap = {};
             matchingRows.forEach(row => {
                 const desc = row['Descriptor'] || 'Unknown';
-                const cfAB = getChanceForAB(row);
-                const caAB = getChanceAgainstAB(row);
+                const stats = extractCategoryRowStats(row, categoryName);
 
                 if (!descMap[desc]) {
                     descMap[desc] = {
@@ -2301,14 +2325,14 @@
                         'Chance Against': 0
                     };
                 }
-                descMap[desc]['Goal For'] += parseNum(row['Goal For']);
-                descMap[desc]['Chance For A'] += cfAB.a;
-                descMap[desc]['Chance For B'] += cfAB.b;
-                descMap[desc]['Chance For'] += cfAB.total;
-                descMap[desc]['Goal Against'] += parseNum(row['Goal Against']);
-                descMap[desc]['Chance Against A'] += caAB.a;
-                descMap[desc]['Chance Against B'] += caAB.b;
-                descMap[desc]['Chance Against'] += caAB.total;
+                descMap[desc]['Goal For'] += stats.goalFor;
+                descMap[desc]['Chance For A'] += stats.chanceForA;
+                descMap[desc]['Chance For B'] += stats.chanceForB;
+                descMap[desc]['Chance For'] += stats.chanceFor;
+                descMap[desc]['Goal Against'] += stats.goalAgainst;
+                descMap[desc]['Chance Against A'] += stats.chanceAgainstA;
+                descMap[desc]['Chance Against B'] += stats.chanceAgainstB;
+                descMap[desc]['Chance Against'] += stats.chanceAgainst;
             });
 
             const displayRows = Object.values(descMap).sort((a, b) => (b['Goal For'] + b['Chance For']) - (a['Goal For'] + a['Chance For']));
